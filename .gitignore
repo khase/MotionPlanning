@@ -13,32 +13,30 @@
 *.userprefs
 
 # Build results
-[Dd]ebugPublic/
-[Rr]elease/
-[Rr]eleases/
-x64/
-x86/
-bld/
-[Oo]bj/
-[Ll]og/
+*/[Dd]ebugPublic/
+*/[Rr]elease/
+*/[Rr]eleases/
+*/x64/
+*/x86/
+*/bld/
+*/[Oo]bj/
+*/[Ll]og/
 
 # Visual Studio 2015 cache/options directory
-.vs/
-# Uncomment if you have tasks that create the project's static files in wwwroot
-#wwwroot/
+*/.vs/
 
 # MSTest test Results
-[Tt]est[Rr]esult*/
-[Bb]uild[Ll]og.*
-*.[Ll]og*
+*/[Tt]est[Rr]esult*/
+*/[Bb]uild[Ll]og.*
+*/*.[Ll]og*
 # NUNIT
-*.VisualState.xml
-TestResult.xml
+*/*.VisualState.xml
+*/TestResult.xml
 
 # Build Results of an ATL Project
-[Dd]ebugPS/
-[Rr]eleasePS/
-dlldata.c
+*/[Dd]ebugPS/
+*/[Rr]eleasePS/
+*/dlldata.c
 
 # DNX
 project.lock.json
