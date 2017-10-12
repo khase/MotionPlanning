@@ -28,7 +28,19 @@ bool Bug0::update(Box obstacle[], Box robot[], int nObst)
 
 	if (obs > -1) {
 		cout << "Aua";
+		heading = heading.Neg();
+		getroffen = true;
 	}
+
+	if (getroffen)
+	{
+		if (count > 30){
+			return true;
+		}
+		count++;
+	}
+
+
 	
 	actPoint.Mac(heading, DIST_MIN); // move next step
 	robot[0].Set(actPoint);

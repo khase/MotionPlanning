@@ -9,5 +9,8 @@ public:
 
 	bool update(Box obstacle[], Box robot[], int nObst);
 	int obstacleInWay(Box obstacle[], Box robot[], int nObst);
+
+	int count = 0;
+	bool getroffen = false;
 };
 
