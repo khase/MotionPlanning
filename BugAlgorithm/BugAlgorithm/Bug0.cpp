@@ -37,14 +37,15 @@ bool Bug0::update(Box obstacle[], Box robot[], int nObst)
 	int obs = obstacleInWay(obstacle, robot, nObst);
 
 	if (obs > -1) {
-		cout << "Aua";
-		heading = heading.Neg();
 		getroffen = true;
+	}
+	else {
+		headToGoal();
 	}
 
 	if (getroffen)
 	{
-		if (count > 30){
+		if (count > 1000){
 			return true;
 		}
 		count++;
@@ -69,7 +70,7 @@ int Bug0::obstacleInWay(Box obstacle[], Box robot[], int nObst)
 		if (dist <= DIST_MIN) {
 			Point out2 = out * *Mat;
 			out2.Normalize();
-			headToPoint(out2);
+			this->heading = out2;
 			return i;
 		}
 	}
