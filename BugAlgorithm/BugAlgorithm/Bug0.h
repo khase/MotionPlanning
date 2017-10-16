@@ -3,6 +3,9 @@
 class Bug0 :
 	public BugAlgorithm
 {
+private:
+	void headToPoint(Point);
+	void headToGoal();
 public:
 	Bug0(const std::string& name);
 	~Bug0();
