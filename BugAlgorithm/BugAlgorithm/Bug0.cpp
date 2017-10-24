@@ -53,7 +53,7 @@ bool Bug0::update(Box obstacle[], Box robot[], int nObst)
 
 
 	
-	actPoint.Mac(heading, DIST_MIN); // move next step
+	actPoint.Mac(heading, DIST_MIN/10); // move next step
 	robot[0].Set(actPoint);
 	return false;
 }
@@ -61,13 +61,13 @@ bool Bug0::update(Box obstacle[], Box robot[], int nObst)
 int Bug0::obstacleInWay(Box obstacle[], Box robot[], int nObst)
 {
 	class ShadowMatrix3x3 { public: double m[3][3]; };   // To allow inlining
-	const Matrix3x3* Mat = (const Matrix3x3*)new ShadowMatrix3x3({0, -1, 0, 1, 0, 0, 0, 0, 1});
+	const Matrix3x3* Mat = (const Matrix3x3*)new ShadowMatrix3x3({ 0, -1, 0 ,  1, 0, 0 ,  0, 0, 1  });
 
 	Point out;
 	for (int i = 0; i <nObst; i++)
 	{
 		double dist = obstacle[i].distance(robot[0], &out);
-		if (dist <= DIST_MIN) {
+		if (dist <= DIST_MIN*2) {
 			Point out2 = out * *Mat;
 			out2.Normalize();
 			this->heading = out2;
