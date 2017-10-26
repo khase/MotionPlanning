@@ -48,11 +48,14 @@ int main(void)
 	DWORD dwStart = GetTickCount();
 
 	// Initialize start, goal, actPoint and heading
-	pot1.setStartPosition(0.3, -0.3); // local minimum
+	//pot1.setStartPosition(0.3, -0.3); // local minimum
 	//pot1.setStartPosition(0.2, -0.2); // local minimum
 	//pot1.setStartPosition(-0.1, -0.2); // no local minimum
 
-	pot1.setGoalPosition(0.1, 0.4); // EASYROB
+	pot1.setStartPosition(-0.3, 0);
+
+	//pot1.setGoalPosition(0.1, 0.4); // EASYROB
+	pot1.setGoalPosition(0.5, 0.4); // EASYROB
 
 	Roboter[0].SetCenter(pot1.getStartPosition());
 
@@ -89,7 +92,21 @@ int main(void)
 // Chekcs, if local minimum is reached
 bool check_local_minimum(vector<Point> path, Point act)
 {
-	//.....
+	int countWasAtThisPointAlready = 0;
+	if (path.size() < 40)
+		return false;
+	double stepSize = (path.at(0) - path.at(1)).Magnitude();
+	for (int i = path.size() - 21; i > (path.size() - 40); i--) {
+		double distance = path.at(i).Distance(act);
+		if (distance < stepSize * 3) {
+			countWasAtThisPointAlready++;
+		}
+	}
+
+	if (countWasAtThisPointAlready >= 10) {
+		return true;
+	}
+
 	return false;
 }
 
