@@ -7,6 +7,8 @@ using namespace std;
 static const double INKR = 0.01;        // step size for robot along gradient
 static const double DIST_MIN = 0.05;    // minimum distance between the robot and the goal
 static const double GOAL_ERROR = 0.01;  // distance between the robot and the goal
+static const double DIST_MIN_OBST = 0.05;    // distance when the obstacle interferes with the robot
+static const double OBST_FORCE_SCALE = 0.001;    // Magic do not touch
 
 /*********************************************************************************************************************************/
 Potential::Potential(const std::string& name)
@@ -67,13 +69,28 @@ bool Potential::update_box(Box obstacle[], Box robot[], int nObst)
     if (goalReached(robotPos, goalPosition, GOAL_ERROR))
     {
         actPoint = goalPosition;
-        //cout << "at goal, smile :)\n";
+        cout << "at goal, smile :)\n";
 
         return true;
     }
 
-    actPoint.Mac((goalPosition - robotPos).Normalize(), INKR); // move next step
+	Point globalForceVector = (goalPosition - robotPos);
+	Point repulsive = Point(0, 0, 0);
+	for (int i = 0; i < nObst; i++) {
+		Box obst = obstacle[i];
+		Point localForceVector;
+		double dist = robot[0].distance(obst, &localForceVector);
+		if (dist <= DIST_MIN_OBST) {
+			localForceVector = localForceVector.Normalize();
+			Point localRepulsive = OBST_FORCE_SCALE * ((1 / DIST_MIN_OBST) - (1 / dist)) * (1 / (dist * dist)) * localForceVector;
+			repulsive += localRepulsive;
+		}
+	}
 
+	globalForceVector += repulsive;
+
+    actPoint.Mac(globalForceVector.Normalize(), INKR); // move next step
+	robot[0].Set(actPoint);
     return false;
 }
 
@@ -88,10 +105,12 @@ bool Potential::update_cylinder(Cylinder obstacle[], Cylinder robot[], int nObst
     if (goalReached(robotPos, goalPosition, GOAL_ERROR))
     {
         actPoint = goalPosition;
-        //cout << "at goal, smile :)\n";
-
-        return true;
+        cout << "at goal, smile :)\n";
+        
+		return true;
     }
+
+
 
     actPoint.Mac((goalPosition - robotPos).Normalize(), INKR); // move next step
 
@@ -109,7 +128,7 @@ bool Potential::update_cylinder_navigation(Cylinder obstacle[], Cylinder robot[]
     if (goalReached(robotPos, goalPosition, GOAL_ERROR))
     {
         actPoint = goalPosition;
-        //cout << "at goal, smile :)\n";
+        cout << "at goal, smile :)\n";
 
         return true;
     }

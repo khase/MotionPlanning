@@ -58,13 +58,15 @@ int main(void)
     bool goal_reached = false;
     bool local_minimum_reached = false;
 
-    while (!goal_reached && !local_minimum_reached)
+	int count = 0;
+    while (!goal_reached && !local_minimum_reached && count < 500)
     {
         goal_reached = pot1.update_box(aHindernis, Roboter, nHind);
         robPos = pot1.getRobPos();
         local_minimum_reached = check_local_minimum(path, robPos);
         path.push_back(pot1.getRobPos()); // speichern des Aktuellen Punktes in vector<Point> path
         cout << robPos.x << " " << robPos.y << endl; // Ausgabe auf Konsole
+		count++;
     }
 
     // Zeit für das Aufstellen des Konfigurationsraumes ausgeben ( in ms )
