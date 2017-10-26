@@ -42,11 +42,11 @@ int main(void)
     DWORD dwStart = GetTickCount();
 
     // Initialize start, goal, actPoint and heading
-    pot1.setStartPosition(0.5, 1.0); // local minimum
+    //pot1.setStartPosition(0.6, 0.0); // local minimum
     //pot1.setStartPosition(0.2, -0.2); // local minimum
-    //pot1.setStartPosition(-0.1, -0.2); // no local minimum
+    pot1.setStartPosition(-0.1, -0.2); // no local minimum
 
-    pot1.setGoalPosition(0.1, 0.0); // EASYROB
+    pot1.setGoalPosition(0.1, 0.4); // EASYROB
 
     Roboter[0].Set(pot1.getStartPosition());
 
@@ -71,10 +71,10 @@ int main(void)
 
     // Zeit für das Aufstellen des Konfigurationsraumes ausgeben ( in ms )
     DWORD dwElapsed = GetTickCount() - dwStart;
+	if (goal_reached)
+		cout << "goal is reached" << endl;
     if (local_minimum_reached)
         cout << "local minimum is reached" << endl;
-    if (goal_reached)
-        cout << "goal is reached" << endl;
     write_program_file(path);
     printf("\nBerechnung dauerte %d ms\n", dwElapsed);
 

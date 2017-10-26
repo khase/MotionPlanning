@@ -8,7 +8,9 @@ static const double INKR = 0.01;        // step size for robot along gradient
 static const double DIST_MIN = 0.05;    // minimum distance between the robot and the goal
 static const double GOAL_ERROR = 0.01;  // distance between the robot and the goal
 static const double DIST_MIN_OBST = 0.1;    // distance when the obstacle interferes with the robot
-static const double OBST_FORCE_SCALE = 0.3;    // Magic do not touch
+static const double DIST_MIN_GOAL = 0.5;    // distance something
+static const double OBST_FORCE_SCALE = 0.00001;    // Magic do not touch
+static const double GOAL_FORCE_SCALE = 1;    // Magic do not touch
 
 /*********************************************************************************************************************************/
 Potential::Potential(const std::string& name)
@@ -75,6 +77,12 @@ bool Potential::update_box(Box obstacle[], Box robot[], int nObst)
     }
 
 	Point globalForceVector = (goalPosition - robotPos);
+	double dGoal = robotPos.Distance(goalPosition);
+
+	if (dGoal > DIST_MIN_GOAL) {
+		globalForceVector = (DIST_MIN_GOAL * GOAL_FORCE_SCALE * globalForceVector) / dGoal;
+	}
+
 	Point repulsive = Point(0, 0, 0);
 	for (int i = 0; i < nObst; i++) {
 		Box obst = obstacle[i];
