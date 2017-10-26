@@ -7,8 +7,8 @@ using namespace std;
 static const double INKR = 0.01;        // step size for robot along gradient
 static const double DIST_MIN = 0.05;    // minimum distance between the robot and the goal
 static const double GOAL_ERROR = 0.01;  // distance between the robot and the goal
-static const double DIST_MIN_OBST = 0.05;    // distance when the obstacle interferes with the robot
-static const double OBST_FORCE_SCALE = 0.001;    // Magic do not touch
+static const double DIST_MIN_OBST = 0.1;    // distance when the obstacle interferes with the robot
+static const double OBST_FORCE_SCALE = 0.3;    // Magic do not touch
 
 /*********************************************************************************************************************************/
 Potential::Potential(const std::string& name)
