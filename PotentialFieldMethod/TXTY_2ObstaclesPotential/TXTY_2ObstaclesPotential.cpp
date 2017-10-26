@@ -85,7 +85,20 @@ int main(void)
 // Chekcs, if local minimum is reached
 bool check_local_minimum(vector<Point> path, Point act)
 {
-    //.....
+	int countWasAtThisPointAlready = 0;
+	if (path.size() < 20)
+		return false;
+	for (int i = path.size()-1; i > (path.size() - 20); i--){
+		double distance = path.at(i).Distance(act);
+		if (distance < 0.03){
+			countWasAtThisPointAlready++;
+		}
+	}
+
+	if (countWasAtThisPointAlready >= 5){
+		return true;
+	}
+
     return false;
 }
 

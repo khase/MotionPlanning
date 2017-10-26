@@ -250,3 +250,4 @@ paket-files/
 *.sln.iml
 
 Schwenkschubgabel Prüfstand/Report/SpesenReport_mo.rdl
+PotentialFieldMethod/TXTY_2ObstaclesPotential/Potential.prg
