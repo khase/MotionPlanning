@@ -24,9 +24,7 @@ void Bug0::headToGoal()
 
 bool Bug0::update(Box obstacle[], Box robot[], int nObst)
 {
-	Point pt, robotPos = actPoint;
-	static Box mink_diff;
-	static int ret = -1;  // no obstacle
+	Point robotPos = actPoint;
 
 	if (goalReached(robotPos, goalPosition, DIST_MIN)) {
 		actPoint = goalPosition;
@@ -39,32 +37,28 @@ bool Bug0::update(Box obstacle[], Box robot[], int nObst)
 	int obs = obstacleInWay(obstacle, robot, nObst);
 
 	if (obs > -1) {
-		cout << "follow obstacle" << endl;
-		// activate emergency exit
-		getroffen = true;
+		cout << "follow obstacle" << endl;		
+		getroffen = true;						// activate counter for emergency exit
 	}
 	else {
 		cout << "heading to goal" << endl;
-		// reset heading towards goal
-		headToGoal();
+		getroffen = false;						// deactivate counte for emergency exit
+		headToGoal();							// reset heading towards goal
 	}
 
 	if (getroffen)
 	{
 		if (count > 10000){
 			// we took a huge ammount of iterations
-			// assume the algorithm broken and exit
-			cout << "Fuck man, wo ist der Asgang..." << endl;
+			// assume the algorithm is broken and exit
+			cout << "Fuck man, wo ist der Ausgang..." << endl;
 			return true;
 		}
 		count++;
 	}
 
-
-	
-	actPoint.Mac(heading, DIST_MIN); // move next step
-	// set the robots actual position
-	robot[0].Set(actPoint);
+	actPoint.Mac(heading, DIST_MIN);	// move one step
+	robot[0].Set(actPoint);				// set the robots actual position
 	return false;
 }
 
@@ -74,18 +68,16 @@ int Bug0::obstacleInWay(Box obstacle[], Box robot[], int nObst)
 	const Matrix3x3* Mat = (const Matrix3x3*)new ShadowMatrix3x3({0, -1, 0, 1, 0, 0, 0, 0, 1}); // simple 90° rotation Matrix
 
 	// this will point to the closest hitpoint of the obstacle
-	// should always be rectangular to the targets wall
+	// should always be rectangular to the obstacles wall
 	Point out;
 	for (int i = 0; i <nObst; i++)
 	{
-		double dist = obstacle[i].distance(robot[0], &out);
-		// Run along the obstacles wall till the distance rises
+		double dist = obstacle[i].distance(robot[0], &out); // Run along the obstacles wall till the distance rises
 		if (dist <= DIST_MIN) {
-			// rotate hitpoint vector by 90 degree
-			Point out2 = out * *Mat;
-			out2.Normalize();
-			// should always be perpendicular to the obstavles wall
-			this->heading = out2;
+			
+			Point out2 = out * *Mat;	// rotate hitpoint vector by 90 degree
+			out2.Normalize();			// should always be perpendicular to the obstacles wall
+			this->heading = out2;		// sets the heading of the robot perpendicular to the obstacles wall
 			return i;
 		}
 	}
