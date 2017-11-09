@@ -1,4 +1,5 @@
 #include <iostream>
+#include <math.h>
 #include "Potential.h"
 
 using namespace std;
@@ -11,6 +12,9 @@ static const double DIST_MIN_OBST = 0.1;   // distance when the obstacle interfe
 static const double DIST_MIN_GOAL = 0.5;    // distance something
 static const double OBST_FORCE_SCALE = 0.00001;    // Magic do not touch
 static const double GOAL_FORCE_SCALE = 1;    // Magic do not touch
+static const double NAV_K = 100;
+
+
 
 /*********************************************************************************************************************************/
 Potential::Potential(const std::string& name)
@@ -161,7 +165,59 @@ bool Potential::update_cylinder_navigation(Cylinder obstacle[], Cylinder robot[]
         return true;
     }
 
-    actPoint.Mac((goalPosition - robotPos).Normalize(), INKR); // move next step
 
+	Point headingGoal = (goalPosition - robotPos);
+	double dGoal = robotPos.Distance(goalPosition);
+	double attractive = pow(dGoal, 2 * NAV_K);
+
+	double repulsive = 1;
+	Point globalForceVector = Point(0, 0, 0);
+	for (int i = 0; i < nObst; i++) {
+		Cylinder obst = obstacle[i];
+		Point localForceVector;
+		double dist = pow(obst.distance(robot[0], &localForceVector), 2);
+		if (i == 0) 
+		{
+			dist *= -1;
+			dist += pow(obst.GetRadius(), 2);
+		}
+		else
+		{
+			dist -= pow(obst.GetRadius(), 2);
+		}
+
+
+		repulsive *= dist;
+
+		double tmp = 1;
+		for (int j = 0; j < nObst; j++) {
+			if (j == i) {
+				continue;
+			}
+			Point dummy = Point(0, 0, 0);
+			double dist = robot[0].distance(obst, &dummy);
+			tmp *= dist;
+		}
+		
+		localForceVector *= (i == 0) ? -2 : 2;
+		localForceVector *= tmp;
+		globalForceVector += localForceVector;
+	}
+
+	double force = repulsive + attractive;
+	cout << "\t" << repulsive << " + " << attractive << " = " << force << endl;
+
+	Point heading = (
+			2 
+			* headingGoal 
+			* pow(force, 1 / NAV_K) - pow(dGoal, 2) 
+			* (1 / NAV_K) 
+			* pow(force, (1 / NAV_K) - 1) 
+			* (2 * NAV_K * pow(dGoal, (2 * NAV_K) - 2) 
+			* headingGoal + globalForceVector))
+		/ pow(force, 2 / NAV_K);
+
+    actPoint.Mac(heading.Normalize(), INKR); // move next step
+	robot[0].SetCenter(actPoint);
     return false;
 }
