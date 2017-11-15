@@ -255,3 +255,8 @@ PotentialFieldMethod/TXTY_2ObstaclesPotential/Potential.prg
 PotentialFieldMethod/data/
 
 *.vcxproj
+
+# LaTeX temporary files
+*.aux
+*.log
+*.toc
