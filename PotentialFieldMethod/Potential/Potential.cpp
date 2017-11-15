@@ -12,7 +12,7 @@ static const double DIST_MIN_OBST = 0.1;   // distance when the obstacle interfe
 static const double DIST_MIN_GOAL = 0.5;    // distance something
 static const double OBST_FORCE_SCALE = 0.00001;    // Magic do not touch
 static const double GOAL_FORCE_SCALE = 1;    // Magic do not touch
-static const double NAV_K = 100;
+static const double NAV_K = 20;
 
 
 
@@ -75,7 +75,7 @@ bool Potential::update_box(Box obstacle[], Box robot[], int nObst)
     if (goalReached(robotPos, goalPosition, GOAL_ERROR))
     {
         actPoint = goalPosition;
-        cout << "at goal, smile :)\n";
+        std::cout << "at goal, smile :)\n";
 
         return true;
     }
@@ -118,7 +118,7 @@ bool Potential::update_cylinder(Cylinder obstacle[], Cylinder robot[], int nObst
 	if (goalReached(robotPos, goalPosition, GOAL_ERROR))
 	{
 		actPoint = goalPosition;
-		cout << "at goal, smile :)\n";
+		std::cout << "at goal, smile :)\n";
 
 		return true;
 	}
@@ -150,6 +150,53 @@ bool Potential::update_cylinder(Cylinder obstacle[], Cylinder robot[], int nObst
 }
 
 /*************************************************************************************************************************/
+
+double calc_beta_i(Cylinder obstacle, Cylinder robot, int i) {
+	Point pt = robot.GetCenter();
+	if (i == 0) {
+		return -pt.Sub(obstacle.GetCenter()).SquareMagnitude()
+			+ pow(obstacle.GetRadius() + robot.GetRadius(), 2);
+	}
+	else {
+		return pt.Sub(obstacle.GetCenter()).SquareMagnitude()
+			- pow(obstacle.GetRadius() + robot.GetRadius(), 2);
+	}
+}
+
+double calc_beta(Cylinder obstacle[], Cylinder robot, int nObst) {
+	double res = 1;
+	for (int i = 0; i < nObst; i++) {
+		res *= calc_beta_i(obstacle[i], robot, i);
+	}
+	return res;
+}
+
+Point calc_p_beta_i(Cylinder obstacle, Cylinder robot, int i) {
+	Point pt = obstacle.GetCenter() - robot.GetCenter();
+	pt *= 2;
+	if (i == 0) {
+		pt *= -1;
+	}
+	return pt;
+}
+
+Point calc_p_beta(Cylinder obstacle[], Cylinder robot, int nObst) {
+	Point res = Point(0, 0, 0);
+	for (int i = 0; i < nObst; i++) {
+		Point pt = calc_p_beta_i(obstacle[i], robot, i);
+		double tmp = 1;
+		for (int j = 0; j < nObst; j++) {
+			if (j == i) {
+				continue;
+			}
+			tmp *= calc_beta_i(obstacle[j], robot, j);
+		}
+		pt *= tmp;
+		res += pt;
+	}
+	return res;
+}
+
 bool Potential::update_cylinder_navigation(Cylinder obstacle[], Cylinder robot[], int nObst)
 {
     Point robotPos = actPoint;
@@ -160,62 +207,29 @@ bool Potential::update_cylinder_navigation(Cylinder obstacle[], Cylinder robot[]
     if (goalReached(robotPos, goalPosition, GOAL_ERROR))
     {
         actPoint = goalPosition;
-        cout << "at goal, smile :)\n";
+        std::cout << "at goal, smile :)\n";
 
         return true;
     }
 
+	double k = NAV_K;
+	Point qminusgoal = goalPosition - robot[0].GetCenter();
+	double distgoal = qminusgoal.SquareMagnitude();
+	double beta = calc_beta(obstacle, robot[0], nObst);
+	Point p_beta = calc_p_beta(obstacle, robot[0], nObst);
 
-	Point headingGoal = (goalPosition - robotPos);
-	double dGoal = robotPos.Distance(goalPosition);
-	double attractive = pow(dGoal, 2 * NAV_K);
-
-	double repulsive = 1;
-	Point globalForceVector = Point(0, 0, 0);
-	for (int i = 0; i < nObst; i++) {
-		Cylinder obst = obstacle[i];
-		Point localForceVector;
-		double dist = pow(obst.distance(robot[0], &localForceVector), 2);
-		if (i == 0) 
-		{
-			dist *= -1;
-			dist += pow(obst.GetRadius(), 2);
-		}
-		else
-		{
-			dist -= pow(obst.GetRadius(), 2);
-		}
+	double distGoalBeta = abs(pow(distgoal, 2 * k) + beta);
 
 
-		repulsive *= dist;
-
-		double tmp = 1;
-		for (int j = 0; j < nObst; j++) {
-			if (j == i) {
-				continue;
-			}
-			Point dummy = Point(0, 0, 0);
-			double dist = robot[0].distance(obst, &dummy);
-			tmp *= dist;
-		}
-		
-		localForceVector *= (i == 0) ? -2 : 2;
-		localForceVector *= tmp;
-		globalForceVector += localForceVector;
-	}
-
-	double force = repulsive + attractive;
-	cout << "\t" << repulsive << " + " << attractive << " = " << force << endl;
-
-	Point heading = (
-			2 
-			* headingGoal 
-			* pow(force, 1 / NAV_K) - pow(dGoal, 2) 
-			* (1 / NAV_K) 
-			* pow(force, (1 / NAV_K) - 1) 
-			* (2 * NAV_K * pow(dGoal, (2 * NAV_K) - 2) 
-			* headingGoal + globalForceVector))
-		/ pow(force, 2 / NAV_K);
+	Point heading =
+		(
+			2 * qminusgoal
+			* pow(distGoalBeta, 1 / k)
+			- pow(distgoal, 2)  * (1 / k) * pow(distGoalBeta, (1 / k) - 1)
+			* (2 * k * pow(distgoal, (2 * k) - 2) * qminusgoal + p_beta)
+		) / (
+			pow(distGoalBeta, 2 / k)
+		);
 
     actPoint.Mac(heading.Normalize(), INKR); // move next step
 	robot[0].SetCenter(actPoint);
