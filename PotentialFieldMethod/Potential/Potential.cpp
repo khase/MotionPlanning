@@ -12,7 +12,7 @@ static const double DIST_MIN_OBST = 0.1;   // distance when the obstacle interfe
 static const double DIST_MIN_GOAL = 0.5;    // distance something
 static const double OBST_FORCE_SCALE = 0.00001;    // Magic do not touch
 static const double GOAL_FORCE_SCALE = 1;    // Magic do not touch
-static const double NAV_K = 20;
+static const double NAV_K = 10;
 
 
 
