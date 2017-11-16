@@ -64,11 +64,13 @@ int main(void)
 	bool goal_reached = false;
 	bool local_minimum_reached = false;
 
+	// break if we need more than 2000 stemps (emergency)
 	int i = 0;
-	while (!goal_reached && !local_minimum_reached && i < 1000)
+	while (!goal_reached && !local_minimum_reached && i < 2000)
 	{
 		goal_reached = pot1.update_cylinder_navigation(aHindernis, Roboter, nHind);
 		robPos = pot1.getRobPos();
+		// schould always be false since the navigation function guarantees only one local minimun -> the goal
 		local_minimum_reached = check_local_minimum(path, robPos);
 		path.push_back(pot1.getRobPos()); // speichern des Aktuellen Punktes in vector<Point> path
 		cout << robPos.x << " " << robPos.y << endl; // Ausgabe auf Konsole
@@ -91,6 +93,7 @@ int main(void)
 // Chekcs, if local minimum is reached
 bool check_local_minimum(vector<Point> path, Point act)
 {
+	// check length-40 -> length-20 entries to be in the same little area (~ PI * (stepSize * 3 ^ 2))
 	int countWasAtThisPointAlready = 0;
 	if (path.size() < 40)
 		return false;

@@ -80,25 +80,34 @@ bool Potential::update_box(Box obstacle[], Box robot[], int nObst)
         return true;
     }
 
+	// vector pointing from our actual position towards the goal
 	Point globalForceVector = (goalPosition - robotPos);
+	// distance to the goal
 	double dGoal = robotPos.Distance(goalPosition);
 
+	// scaling our attractive Force
 	if (dGoal > DIST_MIN_GOAL) {
 		globalForceVector = (DIST_MIN_GOAL * GOAL_FORCE_SCALE * globalForceVector) / dGoal;
 	}
 
+	// sum up repulsive forces of all obstacles
 	Point repulsive = Point(0, 0, 0);
 	for (int i = 0; i < nObst; i++) {
 		Box obst = obstacle[i];
+		// vector pointing towards the obstacle
 		Point localForceVector;
+		// distance to the obstacle
 		double dist = robot[0].distance(obst, &localForceVector);
+		// threshold weather the obstacle is close enough to interact with our robot
 		if (dist <= DIST_MIN_OBST) {
+			// scaling the local (just this obstacle) repulsive force
 			localForceVector = localForceVector.Normalize();
 			Point localRepulsive = OBST_FORCE_SCALE * ((1 / DIST_MIN_OBST) - (1 / dist)) * (1 / (dist * dist)) * localForceVector;
 			repulsive += localRepulsive;
 		}
 	}
 
+	// combine attractive and repulsive forces to get aour new heading
 	globalForceVector += repulsive;
 
     actPoint.Mac(globalForceVector.Normalize(), INKR); // move next step
@@ -109,7 +118,6 @@ bool Potential::update_box(Box obstacle[], Box robot[], int nObst)
 /*************************************************************************************************************************/
 bool Potential::update_cylinder(Cylinder obstacle[], Cylinder robot[], int nObst)
 {
-
 	Point robotPos = actPoint;
 	static int cnt = 0;
 
@@ -123,25 +131,34 @@ bool Potential::update_cylinder(Cylinder obstacle[], Cylinder robot[], int nObst
 		return true;
 	}
 
+	// vector pointing from our actual position towards the goal
 	Point globalForceVector = (goalPosition - robotPos);
+	// distance to the goal
 	double dGoal = robotPos.Distance(goalPosition);
 
+	// scaling our attractive Force
 	if (dGoal > DIST_MIN_GOAL) {
 		globalForceVector = (DIST_MIN_GOAL * GOAL_FORCE_SCALE * globalForceVector) / dGoal;
 	}
 
+	// sum up repulsive forces of all obstacles
 	Point repulsive = Point(0, 0, 0);
 	for (int i = 0; i < nObst; i++) {
 		Cylinder obst = obstacle[i];
+		// vector pointing towards the obstacle
 		Point localForceVector;
+		// distance to the obstacle
 		double dist = robot[0].distance(obst, &localForceVector);
+		// threshold weather the obstacle is close enough to interact with our robot
 		if (dist <= DIST_MIN_OBST) {
+			// scaling the local (just this obstacle) repulsive force
 			localForceVector = localForceVector.Normalize();
 			Point localRepulsive = OBST_FORCE_SCALE * ((1 / DIST_MIN_OBST) - (1 / dist)) * (1 / (dist * dist)) * localForceVector;
 			repulsive += localRepulsive;
 		}
 	}
 
+	// combine attractive and repulsive forces to get aour new heading
 	globalForceVector += repulsive;
 
 	actPoint.Mac(globalForceVector.Normalize(), INKR); // move next step
@@ -151,18 +168,22 @@ bool Potential::update_cylinder(Cylinder obstacle[], Cylinder robot[], int nObst
 
 /*************************************************************************************************************************/
 
+// calculate beta for an specific obstacle
 double calc_beta_i(Cylinder obstacle, Cylinder robot, int i) {
 	Point pt = robot.GetCenter();
 	if (i == 0) {
+		// outer boundary
 		return -pt.Sub(obstacle.GetCenter()).SquareMagnitude()
 			+ pow(obstacle.GetRadius() + robot.GetRadius(), 2);
 	}
 	else {
+		// obstacle
 		return pt.Sub(obstacle.GetCenter()).SquareMagnitude()
 			- pow(obstacle.GetRadius() + robot.GetRadius(), 2);
 	}
 }
 
+// calculate beta for specific configuration (position)
 double calc_beta(Cylinder obstacle[], Cylinder robot, int nObst) {
 	double res = 1;
 	for (int i = 0; i < nObst; i++) {
@@ -171,21 +192,26 @@ double calc_beta(Cylinder obstacle[], Cylinder robot, int nObst) {
 	return res;
 }
 
+// calculate beta vector for an specific obstacle
 Point calc_p_beta_i(Cylinder obstacle, Cylinder robot, int i) {
 	Point pt = obstacle.GetCenter() - robot.GetCenter();
 	pt *= 2;
 	if (i == 0) {
+		// negate value for outer boundary
 		pt *= -1;
 	}
 	return pt;
 }
 
+// calculate beta vector for specific configuration (position)
 Point calc_p_beta(Cylinder obstacle[], Cylinder robot, int nObst) {
 	Point res = Point(0, 0, 0);
 	for (int i = 0; i < nObst; i++) {
 		Point pt = calc_p_beta_i(obstacle[i], robot, i);
+		// calculate beta for specific configuration (without the current obstacle)
 		double tmp = 1;
 		for (int j = 0; j < nObst; j++) {
+			// skipping same obstacle
 			if (j == i) {
 				continue;
 			}
@@ -220,7 +246,7 @@ bool Potential::update_cylinder_navigation(Cylinder obstacle[], Cylinder robot[]
 
 	double distGoalBeta = abs(pow(distgoal, 2 * k) + beta);
 
-
+	// calculate new heading with navigation function
 	Point heading =
 		(
 			2 * qminusgoal
