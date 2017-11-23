@@ -263,3 +263,8 @@ PotentialFieldMethod/data/
 *.synctex.gz
 *.log
 *.toc
+
+# Boost/Gnuplot ignore
+
+**/**/boost
+**/**/gnuplot
