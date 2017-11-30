@@ -17,5 +17,7 @@ public:
 	
 	bool compare(Linie);
 	bool extends(Linie);
+
+	double length();
 };
 

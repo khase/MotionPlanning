@@ -91,3 +91,11 @@ bool Linie::extends(Linie test)
 			this->ende.x == test.anfang.x && this->ende.y == test.anfang.y		//this->ende == test.anfang
 		);
 }
+
+double Linie::length()
+{
+	double distX = std::abs(this->anfang.x - this->ende.x);
+	double distY = std::abs(this->anfang.y - this->ende.y);
+
+	return std::sqrt(std::pow(distX, 2) + std::pow(distY, 2));
+}
