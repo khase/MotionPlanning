@@ -266,5 +266,5 @@ PotentialFieldMethod/data/
 
 # Boost/Gnuplot ignore
 
-**/**/boost
+**/**/boost*
 **/**/gnuplot
