@@ -1,1 +1,0 @@
-@..\gnuplot\x64\gnuplot.exe -p "VisibilityGraph.plg"

@@ -265,6 +265,10 @@ PotentialFieldMethod/data/
 *.toc
 
 # Boost/Gnuplot ignore
-
 **/**/boost*
 **/**/gnuplot
+
+# Paar mehr vs
+**/**/x86/
+**/**/x64/
+**/**/data/
