@@ -13,6 +13,7 @@
 #include "VisibilityGraph.h"
 
 #define SOLUTION
+#define REDUCE
 
 using namespace std;
 
@@ -31,6 +32,13 @@ vector<Point> VisibilityGraph(Graph g, const int nHind)
     //}
 
 #ifdef SOLUTION 
+	Graph obstaclesGraph = g;
+	Graph illegalLinesGraph = g;
+	Graph visibilityGraph = g;
+	Graph pathGraph = g;
+
+	vector<Linie::Obstacle> obstacles;
+
 	int knoten = g.m_vertices.size();
 
 	// erstelle Nachbarschaftsmatrix
@@ -46,11 +54,12 @@ vector<Point> VisibilityGraph(Graph g, const int nHind)
 	std::vector<Linie> illegalLines;	// inside an obstacle
 	for (int i = 0; i < nHind; i++)
 	{
+		Linie::Obstacle obst;
 		// Hindernissdiagonalen
 		for (int j = 0; j < 2; j++) {
 			int indexA = i * 4 + j;
 			int indexB = i * 4 + (j + 2);
-			//boost::add_edge(indexA, indexB, 0, g);
+			boost::add_edge(indexA, indexB, 0, illegalLinesGraph);
 			Point punktA = g[indexA].pt;
 			Point punktB = g[indexB].pt;
 			Linie linie = Linie(punktA, punktB);
@@ -61,12 +70,14 @@ vector<Point> VisibilityGraph(Graph g, const int nHind)
 		for (int j = 0; j < 4; j++) {
 			int indexA = i * 4 + j;
 			int indexB = i * 4 + (j + 1) % 4;
-			//boost::add_edge(indexA, indexB, 0, g);
+			boost::add_edge(indexA, indexB, 0, obstaclesGraph);
 			Point punktA = g[indexA].pt;
 			Point punktB = g[indexB].pt;
 			Linie linie = Linie(punktA, punktB);
 			obstLines.push_back(linie);
+			obst.faces.push_back(linie);
 		}
+		obstacles.push_back(obst);
 	}
 
 	// alle möglichen verbindungen Testen ob sie mit einem Hinderniss Kollidieren
@@ -79,7 +90,22 @@ vector<Point> VisibilityGraph(Graph g, const int nHind)
 			// gegen alle hindernisse testen
 			if (!isIllegal(linie, illegalLines) && isVisible(punktA, punktB, obstLines)) {
 				// verbindung ist möglich -> eintragen;
-				boost::add_edge(i, j, 0, g);
+#ifdef REDUCE
+				int obstIndexI = i / 4;
+				int obstIndexJ = j / 4;
+				if (obstIndexI < nHind && obstIndexJ < nHind && obstIndexI != obstIndexJ) {
+					Linie::Obstacle obsI = obstacles[obstIndexI];
+					Linie::Obstacle obsJ = obstacles[obstIndexJ];
+
+					bool supporting = linie.isSupporting(obsI, obsJ);
+					bool separating = linie.isSeparating(obsI, obsJ);
+					if (!supporting && !separating) {
+						cout << "reduziere linie " << i << " -> " << j << endl;
+						continue;
+					}
+				}
+#endif // REDUCE
+				boost::add_edge(i, j, 0, visibilityGraph);
 				adjaMap[i][j] = linie.length();
 				adjaMap[j][i] = linie.length();
 			}
@@ -90,22 +116,41 @@ vector<Point> VisibilityGraph(Graph g, const int nHind)
 
 	vector<int> weg = dijkstra(adjaMap, knoten - 2, knoten - 1, knoten);
 
-	cout << "Ueber: ";
-	for (vector<int>::iterator it = weg.begin(); it != weg.end(); ++it) {
-		cout << (*it);
-		if (it + 1 != weg.end()) {
-			cout << " -> ";
-		}
+	if (weg.size() > 0) {
+		cout << "Ueber: ";
+		for (vector<int>::iterator it = weg.begin(); it != weg.end(); ++it) {
+			cout << (*it);
+			if (it + 1 != weg.end()) {
+				cout << " -> ";
+				boost::add_edge((*it), (*(it + 1)), 0, pathGraph);
+			}
 
-		// koordinaten der Wegpunkte aus dem Grafen extrahieren
-		Point point = g[(*it)].pt;
-		path.push_back(point);
+			// koordinaten der Wegpunkte aus dem Grafen extrahieren
+			Point point = g[(*it)].pt;
+			path.push_back(point);
+		}
+		cout << endl;
 	}
-	cout << endl;
+	else {
+		cout << "Kein weg gefunden, ist der VisibilityGraoh zusammenhaengend?" << endl;
+	}
 
 #endif SOLUTION
 
-    write_gnuplot_file(g, "VisibilityGraph.dat");
+	write_gnuplot_file(obstaclesGraph, "ObstaclesGraph.dat");
+	write_gnuplot_file(illegalLinesGraph, "IllegalLinesGraph.dat");
+	write_gnuplot_file(visibilityGraph, "VisibilityGraph.dat");
+	write_gnuplot_file(pathGraph, "PathGraph.dat");
+
+	//# damit plotten (.plg Datei) gibt ein schönes Bild ^^
+	//set title "MotionPlanning"
+	//	set size ratio 1.0
+	//	set xrange[0:1]
+	//	set yrange[0:1]
+	//	plot 'IllegalLinesGraph.dat' with lines lc rgb "red" lw 1, \
+	//	'VisibilityGraph.dat' with lines lc rgb "green" lw 1, \
+	//	'ObstaclesGraph.dat' with lines lc rgb "black" lw 1, \
+	//	'PathGraph.dat' with lines lc rgb "blue" lw 2
 
     return path;
 }
@@ -188,11 +233,9 @@ vector<int> dijkstra(double** nachbarn, int start, int ziel, int knoten)
 				}
 			}
 		}
-
 	}
+	return *(new vector<int>);
 }
-
-
 
 bool isVisible(Point testA, Point testB, std::vector<Linie> obstLines) {
 	Linie linie = Linie(testA, testB);
@@ -236,6 +279,6 @@ void write_gnuplot_file(Graph g, string filename)
         cnt++;
     }
 
-    cout << "Number of edges: " << cnt <<  endl;
+    cout << "Number of edges in " << filename << ": " << cnt <<  endl;
     myfile.close();
 }
