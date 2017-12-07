@@ -1,10 +1,25 @@
 #include "stdafx.h"
 #include <iostream>
 #include "cell.h"
+#include <random>
+#include <windows.h>
 
 using namespace std;
 namespace bg = boost::geometry;
 namespace bgi = boost::geometry::index;
+
+//bool testPath(WormCell worm, Eigen::VectorXd a, Eigen::VectorXd b) {
+//	double dist = (a - b).norm();
+//	Eigen::VectorXd dir = (b - a).normalized();
+//	do {
+//		dist /= 2;
+//		for (int i = 1; a + (dir * (dist * (i - 1))) != b; i+=2) {
+//			if (worm.CheckPosition(a + (dir * (dist * i)))) {
+//				return false;
+//			}
+//		}
+//	} while (dist > 1 / 1000)
+//}
 
 /***********************************************************************************************************************************/
 int _tmain(int argc, _TCHAR* argv[])
@@ -93,21 +108,81 @@ int _tmain(int argc, _TCHAR* argv[])
 #endif
 #endif
 
+	DWORD dwStart;
+	DWORD dwElapsed;
+
+	// Startzeit
+	dwStart = GetTickCount();
     const int nNodes = 25000;
     // 1. step: building up a graph g consisting of nNodes vertices
     cout << "1. Step: building " << nNodes << " nodes for the graph" << endl;
 
+	std::mt19937_64 generator = std::mt19937_64(std::random_device().operator()());
+	std::uniform_real_distribution<double> random(0, 1);
+	g = graph_t(nNodes);
+	for (int index = 0; index < nNodes; index++) {
+		//g[index].q_ = MyWorm::Random(generator, random);
+		g[index].q_ = cell.NextRandomCfree();
+	}
+
+	// Zeit ausgeben ( in ms )
+	dwElapsed = GetTickCount() - dwStart;
+	cout << "took " << dwElapsed << " ms\n\n";
+
+	// ###################	
+
+	// Startzeit
+	dwStart = GetTickCount();
     // 2. step: building edges for the graph, if the connection of 2 nodes are in free space
     cout << "2. Step: buildung edges for the graph" << endl;
 
+	for (int i = 0; i < nNodes; i++) {
+		for (int j = i; j < nNodes; j++) {
+			Eigen::VectorXd a = g[i].q_;
+			Eigen::VectorXd b = g[j].q_;
+
+			if (cell.CheckMotion(a, b)) {
+				boost::add_edge(i, j, g);
+			}
+			if (j % 100 == 0) {
+				cout << i << "->" << j << endl;
+			}
+		}
+	}
+
+	// Zeit ausgeben ( in ms )
+	dwElapsed = GetTickCount() - dwStart;
+	cout << "took " << dwElapsed << " ms\n\n";
+
+	// ###################
+
+	// Startzeit
+	dwStart = GetTickCount();
     // 3. Step: connecting start configuration to graph
     cout << "3. Step: connecting start configuration to graph" << endl;
+	// Zeit ausgeben ( in ms )
+	dwElapsed = GetTickCount() - dwStart;
+	cout << "took " << dwElapsed << " ms\n\n";
 
+	// ###################
+
+	// Startzeit
+	dwStart = GetTickCount();
     // 4. Step: connecting goal configuration to graph
     cout << "4. Step: connecting goal configuration to graph" << endl;
+	// Zeit ausgeben ( in ms )
+	dwElapsed = GetTickCount() - dwStart;
+	cout << "took " << dwElapsed << " ms\n\n";
 
+	// ###################
+
+	// Startzeit
+	dwStart = GetTickCount();
     // 5. Step: searching for shortest path
     cout << "5. Step: searching for shortest path" << endl;
+	// Zeit ausgeben ( in ms )
+	dwElapsed = GetTickCount() - dwStart;
+	cout << "took " << dwElapsed << " ms\n\n";
 
     return EXIT_SUCCESS;
 }
