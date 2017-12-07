@@ -1,7 +1,5 @@
 #include "Linie.h"
 
-
-
 Linie::Linie()
 {
 }
@@ -16,13 +14,6 @@ Linie::Linie(Point anfang, Point ende)
 Linie::~Linie()
 {
 }
-
-bool Linie::istPunktAufLinie(Point test)
-{
-	return this->ende.x <= std::max(this->anfang.x, test.x) && this->ende.x >= std::min(this->anfang.x, test.x) &&
-		this->ende.y <= std::max(this->anfang.y, test.y) && this->ende.y >= std::min(this->anfang.y, test.y);
-}
-
 int Linie::orientierungZurLinie(Point test)
 {
 	double val = (this->ende.y - this->anfang.y) * (test.x - this->ende.x) -
@@ -49,16 +40,6 @@ bool Linie::schneidetLinie(Linie test)
 	// orientierung der anfangs und endpunkte einer linie (zur anderen Linie) sind unterschiedlich
 	if (o1a2 != o1e2 && o2a1 != o2e1)
 		return true;
-
-	// ein anfangs/endpunkt einer linie liegt genau auf der anderen linie
-	/*if (o1a2 == 0 && this->istPunktAufLinie(test.anfang))
-		return true;
-	if (o1e2 == 0 && this->istPunktAufLinie(test.ende))
-		return true;
-	if (o2a1 == 0 && test.istPunktAufLinie(this->anfang))
-		return true;
-	if (o2e1 == 0 && test.istPunktAufLinie(this->ende))
-		return true;*/
 
 	// keine überschneidung
 	return false;
@@ -90,38 +71,6 @@ bool Linie::extends(Linie test)
 		) || (
 			this->ende.x == test.anfang.x && this->ende.y == test.anfang.y		//this->ende == test.anfang
 		);
-}
-
-bool Linie::isSeparating(Obstacle obst1, Obstacle obst2)
-{
-	int o1 = this->getObstOrientierung(obst1);
-	int o2 = this->getObstOrientierung(obst2);
-
-	bool gehtDurchObst1 = o1 == 0;
-	bool gehtDurchObst2 = o2 == 0;
-	bool sindGleicheSeite = o1 == o2;
-
-	return !gehtDurchObst1 && !gehtDurchObst2 && !sindGleicheSeite;
-}
-
-bool Linie::isSupporting(Obstacle obst1, Obstacle obst2)
-{
-	int o1 = this->getObstOrientierung(obst1);
-	int o2 = this->getObstOrientierung(obst2);
-
-	bool gehtDurchObst1 = o1 == 0;
-	bool gehtDurchObst2 = o2 == 0;
-	bool sindGleicheSeite = o1 == o2;
-
-	return !gehtDurchObst1 && !gehtDurchObst2 && sindGleicheSeite;
-}
-
-double Linie::length()
-{
-	double distX = std::abs(this->anfang.x - this->ende.x);
-	double distY = std::abs(this->anfang.y - this->ende.y);
-
-	return std::sqrt(std::pow(distX, 2) + std::pow(distY, 2));
 }
 
 int Linie::getObstOrientierung(Obstacle obst)
@@ -157,3 +106,35 @@ int Linie::getObstOrientierung(Obstacle obst)
 	// 0 == linie geht durch das object
 	return orient;
 }
+bool Linie::isSeparating(Obstacle obst1, Obstacle obst2)
+{
+	int o1 = this->getObstOrientierung(obst1);
+	int o2 = this->getObstOrientierung(obst2);
+
+	bool gehtDurchObst1 = o1 == 0;
+	bool gehtDurchObst2 = o2 == 0;
+	bool sindGleicheSeite = o1 == o2;
+
+	return !gehtDurchObst1 && !gehtDurchObst2 && !sindGleicheSeite;
+}
+
+bool Linie::isSupporting(Obstacle obst1, Obstacle obst2)
+{
+	int o1 = this->getObstOrientierung(obst1);
+	int o2 = this->getObstOrientierung(obst2);
+
+	bool gehtDurchObst1 = o1 == 0;
+	bool gehtDurchObst2 = o2 == 0;
+	bool sindGleicheSeite = o1 == o2;
+
+	return !gehtDurchObst1 && !gehtDurchObst2 && sindGleicheSeite;
+}
+
+double Linie::length()
+{
+	double distX = std::abs(this->anfang.x - this->ende.x);
+	double distY = std::abs(this->anfang.y - this->ende.y);
+
+	return std::sqrt(std::pow(distX, 2) + std::pow(distY, 2));
+}
+
