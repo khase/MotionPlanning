@@ -10,9 +10,9 @@ of each pair of edges
 #define __VISIBILITYGRAPH_H__
 
 #include <vector>
-#include <boost/graph/graph_traits.hpp>
-#include <boost/graph/dijkstra_shortest_paths.hpp>
-#include <boost/graph/adjacency_list.hpp>
+#include "boost/graph/graph_traits.hpp"
+#include "boost/graph/dijkstra_shortest_paths.hpp"
+#include "boost/graph/adjacency_list.hpp"
 #include "Point.h"
 #include "Linie.h"
 
