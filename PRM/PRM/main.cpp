@@ -8,19 +8,6 @@ using namespace std;
 namespace bg = boost::geometry;
 namespace bgi = boost::geometry::index;
 
-//bool testPath(WormCell worm, Eigen::VectorXd a, Eigen::VectorXd b) {
-//	double dist = (a - b).norm();
-//	Eigen::VectorXd dir = (b - a).normalized();
-//	do {
-//		dist /= 2;
-//		for (int i = 1; a + (dir * (dist * (i - 1))) != b; i+=2) {
-//			if (worm.CheckPosition(a + (dir * (dist * i)))) {
-//				return false;
-//			}
-//		}
-//	} while (dist > 1 / 1000)
-//}
-
 /***********************************************************************************************************************************/
 int _tmain(int argc, _TCHAR* argv[])
 {
@@ -121,8 +108,14 @@ int _tmain(int argc, _TCHAR* argv[])
 	std::uniform_real_distribution<double> random(0, 1);
 	g = graph_t(nNodes);
 	for (int index = 0; index < nNodes; index++) {
-		//g[index].q_ = MyWorm::Random(generator, random);
-		g[index].q_ = cell.NextRandomCfree();
+		// erstelle vertex Descriptor
+		vertex_t vert = vertex_t(index);
+		
+		// generiere zufällige, kollisionsfreie Konfiguration
+		g[vert].q_ = cell.NextRandomCfree();
+
+		// Trage Konfiguration in kd-Tree ein
+		rtree.insert(rtree_value(cell.Robot(), vert));
 	}
 
 	// Zeit ausgeben ( in ms )
@@ -135,19 +128,19 @@ int _tmain(int argc, _TCHAR* argv[])
 	dwStart = GetTickCount();
     // 2. step: building edges for the graph, if the connection of 2 nodes are in free space
     cout << "2. Step: buildung edges for the graph" << endl;
+	
+	for (int index = 0; index < 1; index++) {
+		// erstelle vertex Descriptor
+		vertex_t vert = vertex_t(index);
 
-	for (int i = 0; i < nNodes; i++) {
-		for (int j = i; j < nNodes; j++) {
-			Eigen::VectorXd a = g[i].q_;
-			Eigen::VectorXd b = g[j].q_;
+		vector<vertex_t> nearest;
+		rtree.query(bgi::nearest(vert, 5), back_inserter(nearest));
 
-			if (cell.CheckMotion(a, b)) {
-				boost::add_edge(i, j, g);
-			}
-			if (j % 100 == 0) {
-				cout << i << "->" << j << endl;
-			}
+		for (auto &q : nearest)
+		{
+			cout << q << endl << endl;
 		}
+		cout << "-----" << endl;
 	}
 
 	// Zeit ausgeben ( in ms )
