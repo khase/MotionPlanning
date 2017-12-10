@@ -133,12 +133,12 @@ int _tmain(int argc, _TCHAR* argv[])
 		// erstelle vertex Descriptor
 		vertex_t vert = vertex_t(index);
 
-		vector<vertex_t> nearest;
-		rtree.query(bgi::nearest(vert, 5), back_inserter(nearest));
+		vector<rtree_value> nearest;
+		rtree.query(bgi::nearest(g[vert].q_, 5), back_inserter(nearest));
 
 		for (auto &q : nearest)
 		{
-			cout << q << endl << endl;
+			cout << q.second << endl << endl;
 		}
 		cout << "-----" << endl;
 	}
