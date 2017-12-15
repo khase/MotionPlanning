@@ -4,9 +4,17 @@
 #include <random>
 #include <windows.h>
 
+#include <vector>
+#include <boost/geometry.hpp>
+#include <boost/geometry/geometries/point.hpp>
+#include <boost/geometry/geometries/box.hpp>
+
 using namespace std;
 namespace bg = boost::geometry;
 namespace bgi = boost::geometry::index;
+typedef std::pair<Eigen::VectorXd, unsigned> value;
+typedef bg::model::point<Eigen::VectorXd, 1, bg::cs::cartesian> point;
+
 
 /***********************************************************************************************************************************/
 int _tmain(int argc, _TCHAR* argv[])
@@ -113,9 +121,9 @@ int _tmain(int argc, _TCHAR* argv[])
 		
 		// generiere zufällige, kollisionsfreie Konfiguration
 		g[vert].q_ = cell.NextRandomCfree();
-
+		rtree_value val = rtree_value(cell.Robot(), vert);
 		// Trage Konfiguration in kd-Tree ein
-		rtree.insert(rtree_value(cell.Robot(), vert));
+		rtree.insert(val);
 	}
 
 	// Zeit ausgeben ( in ms )
@@ -129,18 +137,19 @@ int _tmain(int argc, _TCHAR* argv[])
     // 2. step: building edges for the graph, if the connection of 2 nodes are in free space
     cout << "2. Step: buildung edges for the graph" << endl;
 	
-	for (int index = 0; index < 1; index++) {
+	for (int index = 0; index < nNodes; index++) {
 		// erstelle vertex Descriptor
 		vertex_t vert = vertex_t(index);
 
-		vector<rtree_value> nearest;
-		rtree.query(bgi::nearest(g[vert].q_, 5), back_inserter(nearest));
+		std::vector<rtree_value> nearest;
+		MyWorm test = MyWorm(g[vert].q_);
+		rtree.query(bgi::nearest(test, 5), std::back_inserter(nearest));
 
-		for (auto &q : nearest)
+		/*for (auto &q : nearest)
 		{
 			cout << q.second << endl << endl;
 		}
-		cout << "-----" << endl;
+		cout << "-----" << endl;*/
 	}
 
 	// Zeit ausgeben ( in ms )
