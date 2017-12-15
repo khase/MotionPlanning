@@ -140,16 +140,22 @@ int _tmain(int argc, _TCHAR* argv[])
 	for (int index = 0; index < nNodes; index++) {
 		// erstelle vertex Descriptor
 		vertex_t vert = vertex_t(index);
-
+		Eigen::VectorXd actVector = g[vert].q_;
 		std::vector<rtree_value> nearest;
-		MyWorm test = MyWorm(g[vert].q_);
+		MyWorm test = MyWorm(actVector);
 		rtree.query(bgi::nearest(test, 5), std::back_inserter(nearest));
 
-		/*for (auto &q : nearest)
+		
+		for (auto &q : nearest)
 		{
-			cout << q.second << endl << endl;
+			Eigen::VectorXd nearestVector = g[q.second].q_;
+			if (cell.CheckMotion(nearestVector, actVector)){
+				int lengthOfEdge = (nearestVector - actVector).norm();
+				boost::add_edge(q.second, vert, lengthOfEdge,  g);
+			}
+//			cout << q.second << endl << endl;
 		}
-		cout << "-----" << endl;*/
+		//cout << "-----" << endl;
 	}
 
 	// Zeit ausgeben ( in ms )
