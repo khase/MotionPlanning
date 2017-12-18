@@ -29,16 +29,16 @@ typedef bg::model::point<Eigen::VectorXd, 1, bg::cs::cartesian> point;
 int addEdges(int num, int start, int end, graph_t &g, knn_rtree_t &rtree)
 {
 	WormCell cell;
-	std::cout << num << " building from " << start << " to " << end << endl;
+	int edges = 0;
 	for (int index = start; index < end; index++) {
-		if (index % 100 == 0) {
+		if (index % 500 == 0) {
 			std::cout << ".";
 		}
 		vertex_t vert = vertex_t(index);
 		Eigen::VectorXd actVector = g[vert].q_;
 		std::vector<rtree_value> nearest;
 		MyWorm test = MyWorm(actVector);
-		rtree.query(bgi::nearest(test, 5), std::back_inserter(nearest));
+		rtree.query(bgi::nearest(test, 10), std::back_inserter(nearest));
 
 
 		for (auto &q : nearest)
@@ -47,6 +47,7 @@ int addEdges(int num, int start, int end, graph_t &g, knn_rtree_t &rtree)
 			if (cell.CheckMotion(nearestVector, actVector)){
 				float lengthOfEdge = (nearestVector - actVector).norm();
 				boost::add_edge(q.second, vert, lengthOfEdge, g);
+				edges++;
 			}
 		}
 	}
@@ -62,9 +63,9 @@ int _tmain(int argc, _TCHAR* argv[])
     knn_rtree_t rtree;
 	const float stepsize = .025f;
 
-	const int nNodes = 90000;
+	const int nNodes = 25000;
 
-#define TEST_CASE 4
+#define TEST_CASE 5
 #ifdef TEST_CASE
 #if TEST_CASE == 0
 	// Example
@@ -144,142 +145,146 @@ int _tmain(int argc, _TCHAR* argv[])
 	DWORD dwStart;
 	DWORD dwElapsed;
 
-	// Startzeit
-	dwStart = GetTickCount();
-    // 1. step: building up a graph g consisting of nNodes vertices
-	std::cout << "1. Step: building " << nNodes << " nodes for the graph" << endl;
+	g = graph_t(0);
+	int connectedNodes = 0;
+	bool resampling = false;
 
-	std::mt19937_64 generator = std::mt19937_64(std::random_device().operator()());
-	std::uniform_real_distribution<double> random(0, 1);
-	g = graph_t(nNodes);
-	for (int index = 0; index < nNodes; index++) {
-		// erstelle vertex Descriptor
-		vertex_t vert = vertex_t(index);
-		
-		// generiere zufällige, kollisionsfreie Konfiguration
-		g[vert].q_ = cell.NextRandomCfree();
-		rtree_value val = rtree_value(cell.Robot(), vert);
-		// Trage Konfiguration in kd-Tree ein
-		rtree.insert(val);
-	}
+	vertex_t startIndex;
+	vertex_t goalIndex;
 
-	// Zeit ausgeben ( in ms )
-	dwElapsed = GetTickCount() - dwStart;
-	std::cout << "took " << dwElapsed << " ms\n\n";
+	do {
+		// Startzeit
+		dwStart = GetTickCount();
+		// 1. step: building up a graph g consisting of nNodes vertices
+		std::cout << "1. Step: building " << nNodes << " nodes for the graph" << endl;
 
-	// ###################	
+		for (int index = 0; index < nNodes; index++) {
+			// erstelle vertex Descriptor
+			vertex_prop_t prop;
+			// generiere zufällige, kollisionsfreie Konfiguration
+			prop.q_ = cell.NextRandomCfree();
+			vertex_t vert = boost::add_vertex(prop, g);
 
-	// Startzeit
-	dwStart = GetTickCount();
-    // 2. step: building edges for the graph, if the connection of 2 nodes are in free space
-	std::cout << "2. Step: buildung edges for the graph" << endl;
-	const int numThreads = 8;
-	std::vector<std::thread> threads;
-	for (int i = 0; i < numThreads; ++i) {
-		threads.push_back(std::thread(addEdges, i, i* (nNodes / numThreads), (i + 1) * (nNodes / numThreads), std::ref(g), std::ref(rtree)));
-	}
-	for (auto& t : threads) {
-		t.join();
-	}
-	int edges = 0;/*
-	for (int index = 0; index < nNodes; index++) {
-		if (index % 100 == 0) {
-			std::cout << "\r" << index << "/" << nNodes;
-			dwElapsed = GetTickCount() - dwStart;
-			std::cout << " (" << (int)(dwElapsed / (index+1.f) * (nNodes - index)) / 1000 << "s remaining)";
+			// Trage Konfiguration in kd-Tree ein
+			rtree_value val = rtree_value(cell.Robot(), vert);
+			rtree.insert(val);
 		}
-		// erstelle vertex Descriptor
-		vertex_t vert = vertex_t(index);
-		Eigen::VectorXd actVector = g[vert].q_;
-		std::vector<rtree_value> nearest;
-		MyWorm test = MyWorm(actVector);
-		rtree.query(bgi::nearest(test, 10), std::back_inserter(nearest));
 
-		
-		for (auto &q : nearest)
-		{
-			Eigen::VectorXd nearestVector = g[q.second].q_;
-			if (cell.CheckMotion(nearestVector, actVector)){
-				float lengthOfEdge = (nearestVector - actVector).norm();
-				boost::add_edge(q.second, vert, lengthOfEdge,  g);
-				edges++;
+		// Zeit ausgeben ( in ms )
+		dwElapsed = GetTickCount() - dwStart;
+		std::cout << "took " << dwElapsed << " ms\n\n";
+
+		// ###################	
+
+		// Startzeit
+		dwStart = GetTickCount();
+		// 2. step: building edges for the graph, if the connection of 2 nodes are in free space
+		std::cout << "2. Step: buildung edges for the graph" << endl;
+		const int numThreads = 8;
+		std::vector<std::thread> threads;
+		int numVertices = g.m_vertices.size();
+		for (int i = 0; i < numThreads; ++i) {
+			threads.push_back(std::thread(addEdges, i, (i* (numVertices / numThreads)), ((i + 1) * (numVertices / numThreads)), std::ref(g), std::ref(rtree)));
+		}
+		for (auto& t : threads) {
+			t.join();
+		}
+		connectedNodes = g.m_vertices.size();
+		std::cout << endl << g.m_edges.size() << " edges added" << endl;
+
+		// Zeit ausgeben ( in ms )
+		dwElapsed = GetTickCount() - dwStart;
+		std::cout << "took " << dwElapsed << " ms\n\n";
+
+		// ###################
+
+		if (!resampling) {
+			// Startzeit
+			dwStart = GetTickCount();
+			// 3. Step: connecting start configuration to graph
+			std::cout << "3. Step: connecting start configuration to graph" << endl;
+
+			vertex_prop_t prop;
+			prop.q_ = qStart;
+			startIndex = boost::add_vertex(prop, g);
+			rtree_value val = rtree_value(cell.Robot(), startIndex);
+			// Trage Konfiguration in kd-Tree ein
+			rtree.insert(val);
+
+			Eigen::VectorXd actVector = g[startIndex].q_;
+			std::vector<rtree_value> nearest;
+			MyWorm test = MyWorm(actVector);
+			rtree.query(bgi::nearest(test, 500), std::back_inserter(nearest));
+
+			int edges = 0;
+			for (auto &q : nearest)
+			{
+				Eigen::VectorXd nearestVector = g[q.second].q_;
+				if (cell.CheckMotion(nearestVector, actVector)) {
+					float lengthOfEdge = (nearestVector - actVector).norm();
+					boost::add_edge(q.second, startIndex, lengthOfEdge, g);
+					edges++;
+				}
 			}
+			std::cout << edges << " Edges added" << endl;
+
+			// Zeit ausgeben ( in ms )
+			dwElapsed = GetTickCount() - dwStart;
+			std::cout << "took " << dwElapsed << " ms\n\n";
+
+			// ###################
+
+			// Startzeit
+			dwStart = GetTickCount();
+			// 4. Step: connecting goal configuration to graph
+			std::cout << "4. Step: connecting goal configuration to graph" << endl;
+
+			prop.q_ = qGoal;
+			goalIndex = boost::add_vertex(prop, g);
+			val = rtree_value(cell.Robot(), goalIndex);
+			// Trage Konfiguration in kd-Tree ein
+			rtree.insert(val);
+
+			actVector = g[goalIndex].q_;
+			nearest;
+			test = MyWorm(actVector);
+			rtree.query(bgi::nearest(test, 500), std::back_inserter(nearest));
+
+			edges = 0;
+			for (auto &q : nearest)
+			{
+				Eigen::VectorXd nearestVector = g[q.second].q_;
+				if (cell.CheckMotion(nearestVector, actVector)) {
+					float lengthOfEdge = (nearestVector - actVector).norm();
+					boost::add_edge(q.second, goalIndex, lengthOfEdge, g);
+					edges++;
+				}
+			}
+			std::cout << edges << " Edges added" << endl;
+
+			// Zeit ausgeben ( in ms )
+			dwElapsed = GetTickCount() - dwStart;
+			std::cout << "took " << dwElapsed << " ms\n\n";
 		}
-	}*/
-	std::cout << endl << " Edges added" << endl;
 
-	// Zeit ausgeben ( in ms )
-	dwElapsed = GetTickCount() - dwStart;
-	std::cout << "took " << dwElapsed << " ms\n\n";
+		// ###################
 
-	// ###################
-
-	// Startzeit
-	dwStart = GetTickCount();
-    // 3. Step: connecting start configuration to graph
-	std::cout << "3. Step: connecting start configuration to graph" << endl;
-
-	vertex_prop_t prop;
-	prop.q_ = qStart;
-	vertex_t startIndex = boost::add_vertex(prop, g);
-	rtree_value val = rtree_value(cell.Robot(), startIndex);
-	// Trage Konfiguration in kd-Tree ein
-	rtree.insert(val);
-
-	Eigen::VectorXd actVector = g[startIndex].q_;
-	std::vector<rtree_value> nearest;
-	MyWorm test = MyWorm(actVector);
-	rtree.query(bgi::nearest(test, 500), std::back_inserter(nearest));
-
-	edges = 0;
-	for (auto &q : nearest)
-	{
-		Eigen::VectorXd nearestVector = g[q.second].q_;
-		if (cell.CheckMotion(nearestVector, actVector)) {
-			float lengthOfEdge = (nearestVector - actVector).norm();
-			boost::add_edge(q.second, startIndex, lengthOfEdge, g);
-			edges++;
+		std::vector<int> component(num_vertices(g));
+		std::cout << g.m_vertices.size() << " Vertices" << endl;
+		std::cout << g.m_edges.size() << " Edges" << endl;
+		int num = connected_components(g, &component[0]);
+		std::cout << num << " Components" << endl;
+		if (component[startIndex] != component[goalIndex]) {
+			std::cout << "No Connection!" << endl;
+			std::cout << "Resampling..." << endl;
+			resampling = true;
 		}
-	}
-	std::cout << edges << " Edges added" << endl;
-
-	// Zeit ausgeben ( in ms )
-	dwElapsed = GetTickCount() - dwStart;
-	std::cout << "took " << dwElapsed << " ms\n\n";
-
-	// ###################
-
-	// Startzeit
-	dwStart = GetTickCount();
-    // 4. Step: connecting goal configuration to graph
-	std::cout << "4. Step: connecting goal configuration to graph" << endl;
-
-	prop.q_ = qGoal;
-	vertex_t goalIndex = boost::add_vertex(prop, g);
-	val = rtree_value(cell.Robot(), goalIndex);
-	// Trage Konfiguration in kd-Tree ein
-	rtree.insert(val);
-
-	actVector = g[goalIndex].q_;
-	nearest;
-	test = MyWorm(actVector);
-	rtree.query(bgi::nearest(test, 500), std::back_inserter(nearest));
-
-	edges = 0;
-	for (auto &q : nearest)
-	{
-		Eigen::VectorXd nearestVector = g[q.second].q_;
-		if (cell.CheckMotion(nearestVector, actVector)) {
-			float lengthOfEdge = (nearestVector - actVector).norm();
-			boost::add_edge(q.second, goalIndex, lengthOfEdge, g);
-			edges++;
+		else {
+			resampling = false;
 		}
-	}
-	std::cout << edges << " Edges added" << endl;
+		std::cout << endl;
 
-	// Zeit ausgeben ( in ms )
-	dwElapsed = GetTickCount() - dwStart;
-	std::cout << "took " << dwElapsed << " ms\n\n";
+	} while (resampling);
 
 	// ###################
 
@@ -287,14 +292,6 @@ int _tmain(int argc, _TCHAR* argv[])
 	dwStart = GetTickCount();
     // 5. Step: searching for shortest path
 	std::cout << "5. Step: searching for shortest path" << endl;
-
-
-	std::vector<int> component(num_vertices(g));
-	int num = connected_components(g, &component[0]);
-	std::cout << num << " Components" << endl;
-	if (component[startIndex] != component[goalIndex]){
-		std::cout << "NoConnection!" << endl;
-	}
 
 	std::vector<vertex_t> p(num_vertices(g));
 	std::vector<float> d(num_vertices(g));
