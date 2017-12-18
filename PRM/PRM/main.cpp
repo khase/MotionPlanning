@@ -56,16 +56,16 @@ int addEdges(int num, int start, int end, graph_t &g, knn_rtree_t &rtree)
 /***********************************************************************************************************************************/
 int _tmain(int argc, _TCHAR* argv[])
 {
-    WormCell cell;
-    Eigen::VectorXd qStart(5), qGoal(5), q(5);
-    vector<Eigen::VectorXd> path; // create a point vector for storing the path
-    graph_t g;
-    knn_rtree_t rtree;
+	WormCell cell;
+	Eigen::VectorXd qStart(5), qGoal(5), q(5);
+	vector<Eigen::VectorXd> path; // create a point vector for storing the path
+	graph_t g;
+	knn_rtree_t rtree;
 	const float stepsize = .025f;
 
 	const int nNodes = 25000;
 
-#define TEST_CASE 6
+#define TEST_CASE 5
 #ifdef TEST_CASE
 #if TEST_CASE == 0
 	// Example
@@ -102,7 +102,7 @@ int _tmain(int argc, _TCHAR* argv[])
 #elif TEST_CASE == 1
 	std::cout << "Test case 1" << endl;
 	qStart << .6, .1, 0., 0., 0.;
-    qGoal << .1, .8, DEG2RAD(-90.f), 0., 0.;
+	qGoal << .1, .8, DEG2RAD(-90.f), 0., 0.;
 #elif TEST_CASE == 2
 	std::cout << "Test case 2" << endl;
 	qStart << .1, .8, DEG2RAD(-90.f), DEG2RAD(-180.f), DEG2RAD(180.f);
@@ -149,12 +149,25 @@ int _tmain(int argc, _TCHAR* argv[])
 	g = graph_t(0);
 	int connectedNodes = 0;
 	bool resampling = false;
+	int resamplesDone = 0;
+	bool solutionFound = false;
 
 	vertex_t startIndex;
 	vertex_t goalIndex;
 
+	if (!cell.CheckPosition(qStart)){
+		cout << "Startposition ungueltig!" << endl;
+		return 0;
+	}
+	if (!cell.CheckPosition(qGoal)){
+		cout << "Endposition ungueltig!" << endl;
+		return 0;
+	}
+
+
 	do {
 		// Startzeit
+		resamplesDone++;
 		dwStart = GetTickCount();
 		// 1. step: building up a graph g consisting of nNodes vertices
 		std::cout << "1. Step: building " << nNodes << " nodes for the graph" << endl;
@@ -282,16 +295,38 @@ int _tmain(int argc, _TCHAR* argv[])
 		}
 		else {
 			resampling = false;
+			solutionFound = true;
+			std::cout << "Solution found after " << resamplesDone << " resample(s)." << endl;
 		}
+
+		if (resamplesDone >= 5 && !solutionFound){
+			cout << " Already " << resamplesDone << " resamples were processed but there ist still no solution.\r\n  Would you like to continue?\r\n  y / n  ";
+			string shouldResample;
+			std::cin >> shouldResample;
+			if (shouldResample == "y"){
+				resampling = true;
+			}
+			else 
+			{ 
+				resampling = false; 
+				solutionFound = false;
+			}
+		}
+
 		std::cout << endl;
 
 	} while (resampling);
+
+	if (!solutionFound){
+		std::cout << "No solution found. Exiting" << endl;
+		return EXIT_FAILURE;
+	}
 
 	// ###################
 
 	// Startzeit
 	dwStart = GetTickCount();
-    // 5. Step: searching for shortest path
+	// 5. Step: searching for shortest path
 	std::cout << "5. Step: searching for shortest path" << endl;
 
 	std::vector<vertex_t> p(num_vertices(g));
@@ -334,6 +369,6 @@ int _tmain(int argc, _TCHAR* argv[])
 	dwElapsed = GetTickCount() - dwStartTotal;
 	std::cout << "total time took " << dwElapsed << " ms\n\n";
 
-    return EXIT_SUCCESS;
+	return EXIT_SUCCESS;
 }
 
