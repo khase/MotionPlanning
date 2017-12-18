@@ -3,6 +3,7 @@
 #include "cell.h"
 #include <random>
 #include <windows.h>
+#include <thread>
 
 #include <vector>
 #include <boost/geometry.hpp>
@@ -17,6 +18,33 @@ typedef std::pair<Eigen::VectorXd, unsigned> value;
 typedef bg::model::point<Eigen::VectorXd, 1, bg::cs::cartesian> point;
 
 
+
+int addEdges(int num, int start, int end, graph_t g, knn_rtree_t rtree)
+{
+	WormCell cell;
+	std::cout << num << " building from " << start << " to " << end << endl;
+	for (int index = start; index < end; index++) {
+		if (index % 100 == 0) {
+			std::cout << ".";
+		}
+		vertex_t vert = vertex_t(index);
+		Eigen::VectorXd actVector = g[vert].q_;
+		std::vector<rtree_value> nearest;
+		MyWorm test = MyWorm(actVector);
+		rtree.query(bgi::nearest(test, 15), std::back_inserter(nearest));
+
+
+		for (auto &q : nearest)
+		{
+			Eigen::VectorXd nearestVector = g[q.second].q_;
+			if (cell.CheckMotion(nearestVector, actVector)){
+				float lengthOfEdge = (nearestVector - actVector).norm();
+				boost::add_edge(q.second, vert, lengthOfEdge, g);
+			}
+		}
+	}
+	return 0;
+}
 /***********************************************************************************************************************************/
 int _tmain(int argc, _TCHAR* argv[])
 {
@@ -27,7 +55,7 @@ int _tmain(int argc, _TCHAR* argv[])
     knn_rtree_t rtree;
     const float stepsize = .025f;
 
-#define TEST_CASE 0
+#define TEST_CASE 5
 #ifdef TEST_CASE
 #if TEST_CASE == 0
 	// Example
@@ -109,7 +137,7 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	// Startzeit
 	dwStart = GetTickCount();
-    const int nNodes = 25000;
+    const int nNodes = 50000;
     // 1. step: building up a graph g consisting of nNodes vertices
 	std::cout << "1. Step: building " << nNodes << " nodes for the graph" << endl;
 
@@ -137,8 +165,15 @@ int _tmain(int argc, _TCHAR* argv[])
 	dwStart = GetTickCount();
     // 2. step: building edges for the graph, if the connection of 2 nodes are in free space
 	std::cout << "2. Step: buildung edges for the graph" << endl;
-	
-	int edges = 0;
+	const int numThreads = 8;
+	std::vector<std::thread> threads;
+	for (int i = 0; i < numThreads; ++i) {
+		threads.push_back(std::thread(addEdges, i, i* (nNodes / numThreads), (i + 1) * (nNodes / numThreads), std::ref(g), std::ref(rtree)));
+	}
+	for (auto& t : threads) {
+		t.join();
+	}
+	int edges = 0;/*
 	for (int index = 0; index < nNodes; index++) {
 		if (index % 100 == 0) {
 			std::cout << "\r" << index << "/" << nNodes;
@@ -157,13 +192,13 @@ int _tmain(int argc, _TCHAR* argv[])
 		{
 			Eigen::VectorXd nearestVector = g[q.second].q_;
 			if (cell.CheckMotion(nearestVector, actVector)){
-				int lengthOfEdge = (nearestVector - actVector).norm();
+				float lengthOfEdge = (nearestVector - actVector).norm();
 				boost::add_edge(q.second, vert, lengthOfEdge,  g);
 				edges++;
 			}
 		}
-	}
-	std::cout << edges << " Edges added" << endl;
+	}*/
+	std::cout << endl << " Edges added" << endl;
 
 	// Zeit ausgeben ( in ms )
 	dwElapsed = GetTickCount() - dwStart;
@@ -281,3 +316,4 @@ int _tmain(int argc, _TCHAR* argv[])
 
     return EXIT_SUCCESS;
 }
+
