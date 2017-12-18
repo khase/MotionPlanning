@@ -44,7 +44,7 @@ int addEdges(int num, int start, int end, graph_t &g, knn_rtree_t &rtree)
 		for (auto &q : nearest)
 		{
 			Eigen::VectorXd nearestVector = g[q.second].q_;
-			if (cell.CheckMotion(nearestVector, actVector)){
+			if (!boost::edge(q.second, vert, g).second && cell.CheckMotion(nearestVector, actVector)) {
 				float lengthOfEdge = (nearestVector - actVector).norm();
 				boost::add_edge(q.second, vert, lengthOfEdge, g);
 				edges++;
@@ -63,7 +63,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	knn_rtree_t rtree;
 	const float stepsize = .025f;
 
-	const int nNodes = 25000;
+	const int nNodes = 10000;
 
 #define TEST_CASE 5
 #ifdef TEST_CASE
