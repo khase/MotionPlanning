@@ -1,0 +1,96 @@
+\documentclass[a4paper]{scrartcl}
+\usepackage[utf8]{inputenc}			% Für Umlaute
+\usepackage[T1]{fontenc}			% Für richtige Schrift
+\usepackage[ngerman]{babel}			% Für neue deutsche Rechtschreibung (Trennung)
+\usepackage{color}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{textcomp}				% Fürs Gardzeichen
+
+\usepackage{scrpage2}				% Für Kopf- und Fußzeilen
+\pagestyle{scrheadings}				% Für Kopf- und Fußzeilen
+\clearscrheadfoot					% Für Kopf- und Fußzeilen
+
+\renewcommand{\labelenumi}{(\alph{enumi})}
+\renewcommand{\labelenumii}{(\roman{enumii})}
+
+\begin{document}
+\titlehead{Wintersemester 2017/2018\\Motion Planning\\Prof. Horsch, Rudi Scheitler}
+\author{David Welsch, Ken Hasenbank}
+\title{Praktikum 4 - Probabilistic Roadmap (PRM)}
+\maketitle
+
+\section*{Beschreibung der Aufgabe}
+
+Das Ziel dieses Praktikums war es, auf Basis einer PRM einen Weg zwischen einer Start- und einer Zielkonfiguration zu finden. \\
+
+Das Konzept von PRM ist es, eine bestimmte Anzahl an zufälligen Konfigurationen in den vorher definierten Konfigurationsraum zu streuen und diese auf Kollisionen zu testen. Ist der Punkt kollisionsfrei, so wird er als gültige Konfiguration gespeichert. Ist die definierte Anzahl an Konfigurationen erstellt und getestet, wird versucht, diese Konfigurationen durch kollisionsfreie Pfade zu verbinden. So entsteht einer oder mehrere Graphen, welche alle gültigen Konfigurationen beinhalten. Nun müssen noch die Start- sowie  Zielkonfiguration zu den Graphen hinzugefügt werden. Liegen Start- und Zielkonfiguration auf demselben Graphen kann mittels eines Graphen-Such-Algorithmus wie beispielsweise dem A* oder Dijkstra ein Pfad von Start- zu Zielkonfiguration gefunden werden. Die Punkte auf diesem Pfad beschreiben alle Konfigurationen, die benötigt werden, um die Bewegung auszuführen. \\
+
+In der gegebenen Aufgabe soll ein Wurm mit 5 Freiheitsgraden (zwei davon translatorisch, drei rotatorisch) durch einen Parcours mit 5 Hindernissen bewegt werden.
+
+\section*{Beschreibung der L"osung}
+
+Zur L"osung haben wir den vorgegeben Code-Rahmen verwendet. Alle Berechnungen erfolgen in der Datei \textit{main.cpp} und dort in der Methode \textit{\_tmain}. Wir nutzen zudem eine Methode um die Kanten zum Graphen hinzuzufügen. Diese haben wir ausgelagert, da wir die Erstellung zur schnelleren Bearbeitung parallelisiert haben.\\
+
+Ab hier wird durch die Beschreibung der Datei \textit{main.cpp} unser Vorgehen erläutert:
+
+\begin{itemize}
+	\item (Zeilen 29-55) In diesen Zeilen befindet sich die Methode \textit{addEdges}. Diese fügt zum übergebenen Graphen \textit{g} kollisionsfreie Kanten hinzu.\\
+	Die übergebenen Parameter haben folgende Funktionen:
+	\begin{itemize}
+		\item \textit{int num}: Dieser Parameter wird verwendet, um beim debuggen die Threadnummer zu erkennen
+		\item \textit{int start}: Mit diesem Parameter wird definiert, ab welcher Konfiguration im Graphen begonnen werden soll.
+		\item \textit{int end}: Mit diesem Parameter wird definiert, bis zu welcher Konfiguration im Graphen die Berechnung durchgeführt werden soll.
+		\item \textit{graph\_t \&g}: Dieser Parameter enthält eine Referenz auf den Graphen, welcher später alle Verbindungen zwischen den Konfigurationen enthalten soll. Es wird eine Referenz übergeben, da später mehrere Threads auf diesen Graphen schreiben und durch die Übergabe als Kopie nur die Änderungen eines Threads übernommen werden würden.
+		\item \textit{knn\_rtree\_t \&rtree}: Dieser Parameter enthält den rtree, welcher zur Bestimmung der \textit{x} nächsten Konfigurationen benötigt wird. Dieser wird als Referenz übergeben um Speicherplatz zu sparen.\\
+	\end{itemize}
+	Im Folgenden wird nun die Methode selbst beschrieben. Die Zeilenangaben sind absolut in der Datei \textit{main.cpp} angegeben.
+	\begin{itemize}
+		\item (Zeile 33) Hier wird die for-Schleife gestartet, welche von der übergebenen Start- bis zur Zielkonfiguration läuft.
+		\item (Zeilen 34-36) Zur Kontrolle, ob die Berechnung noch läuft, wird bei jedem 500sten Durchlauf ein . auf der Konsole ausgegeben.
+		\item (Zeile 37-41) Hier wird zuerst die aktuell untersuchte Konfiguration geladen (Variable \textit{actVector}). Dann wird ein neuer std::vector erstellt, welcher die benachbarten Konfigurationen aus dem rtree speichert. In Zeile 40 wird dann ein Roboter in Form des 5-dimensionalen Wurms erstellt, welcher die aktuell zu untersuchende Konfiguration annimmt. In Zeile 41 werden schließlich mit Hilfe des rtrees die nächsten 10 Nachbarn der aktuell zu untersuchenden Konfiguration gesucht und in den std::vector \textit{nearest} gespeichert. 
+		\item (Zeile 44-52) In diesen Zeilen wird getestet, welche der gefundenen Nachbarn kollisionsfrei von der aktuell untersuchten Konfiguration erreicht werden können. Hierzu wird mit einer weiteren for-Schleife jede Nachbarkonfiguration mittels \textit{cell.CheckMotion} die Bewegung von der aktuellen Konfiguration (aus der übergeordneten for-Schleife) zur gefundenen Nachbarkonfiguration getestet. Zudem wird überprüft, ob es die Kante bereits gibt, da sie dann nicht erneut überprüft werden muss. Ist sie nicht vorhanden und die Bewegung ist kollisionsfrei möglich, wird die Kante inklusive zugehöriger Länge dem Graphen \textit{g} hinzugefügt (Zeile 49).
+	\end{itemize}
+	Damit ist die Methode \textit{addEdges} beschrieben.
+	
+	\item Methode \textit{\_tmain}: Im Folgenden wird die Methode \textit{\_tmain} beschrieben, welche die Berechnung entsprechend des PRM durchführt. 
+	
+	\begin{itemize}
+		\item (Zeilen 57-144) In diesen Zeilen werden die Testcases sowie benötigte Variablen deklariert.
+		\item (Zeilen 145-147) Hier werden DWORDs definiert, welche Zeitstempel speichern, um die benötigte Zeit zur Berechnung der einzelnen Schritte sowie der gesamten Berechnungszeit anzeigen zu können.
+		\item (Zeile 149) In dieser Zeile wir der Graph initialisiert, welcher später die Lösung enthält.
+		\item (Zeilen 150-153) In diesen Zeilen werden benötigte Variablen zum Resampling initialisiert. Die Verwendung dieser Variablen wird später erläutert.
+		\item (Zeilen 158-165) In den folgenden if-Abfragen wird geprüft, ob sowohl Start- als auch Zielkonfiguration kollisionsfrei sind. Ist dies nicht der Fall, wird das Programm direkt terminiert, da kein gültiger Pfad erstellt werden kann.
+		\item (Zeile 168) Hier wird eine do-while Schleife gestartet, um das Resampling zu realisieren.
+		
+		\item (Zeilen 170-173) Diese Zeilen dienen dazu, die Zeit des ersten Schrittes zu erfassen, sowie während dem Programmlauf zu sehen, an welcher Stelle sich das Programm befindet. Außerdem wird die Variable \textit{resamplesDone} hochgezählt, um zu erfassen, wie oft bereits neue Konfigurationen (Nodes) und Verbindungen zwischen diesen (Edges) erstellt wurden.
+		\item (Zeile 175) Eine for-Schleife wird initialisiert, welche von 0 bis zur Anzahl der zu erstellenden Konfigurationen läuft.
+		\item (Zeilen 177-184) In diesen Zeilen wird der eigentliche erste Schritt des Algorithmus durchgeführt. Hierzu wird zuerst eine zufällige, kollisionsfreie Konfiguration erstellt und diese dem rtree hinzugefügt. 
+		
+		\item (Zeilen 188-196) Diese Zeilen dienen dazu, die Zeit des ersten Schrittes auszugeben sowie die Zeitmessung für den neuen, zweiten Schritt zu starten.
+		\item (Zeilen 197-205) Hier werden acht Threads erstellt, welche die Berechnung der Edges mit Hilfe der Methode \textit{addEdges} von oben durchführen.
+		\item (Zeilen 206-218) Anschließend werden wieder Ausgaben erstellt, welche zur Laufzeit aufzeigen, wie viele Edges erstellt wurden, sowie die benötigte Zeit des zweiten Schrittes ausgeben.
+		\item (Zeile 222) Wird nicht geresampled, (entpricht dem ersten Durchgang), wird in den folgenden Zeilen die Startkonfiguration dem rtree hinzugefügt. (Zeilen 223-227)
+		\item (Zeile 230-244) In diesen Zeilen wird genau wie in der Methode \textit{addEdges} die nächsten Nachbarn gesucht (hier jedoch die nächsten 500, um sicher eine Verbindung von Start-Konfiguration zu einem der entstandenen Graphen zu finden.)
+		\item (Zeilen 245-256) Wieder zur Information
+		\item (Zeilen 258-280) Anschließend wird genau wie mit der Startkonfiguration auch mit der Zielkonfiguration verfahren.
+		\item (Zeilen 289-293) In diesen Zeilen wird auf der Konsole der aktuelle Zustand des Graphen ausgegeben. Diese Informationen beinhalten die Anzahl der Konfigurationen, sowie die Anzahl der Verbindungen zwischen diesen. Zudem wird die Anzahl der nicht zusammenhängenden Graphen ausgegeben.
+		\item (Zeilen 294-298) Hier wird getestet, ob sich die Start- und Zielkonfiguration auf demselben Graphen befinden. Ist dies nicht der Fall, wird die Variable \textit{resampling} auf true gesetzt, damit im weiteren Verlauf klar ist, dass geresampled werden soll. Zudem wird ausgegeben, dass keine Verbindung gefunden werden konnte.
+		\item (Zeilen 299-303) Sollten beide Konfigurationen auf demselben zusammenhängenden Teil des Graphen liegen, wird die Variable \textit{resampling} auf false gesetzt, da eine Verbindung der Start- und Zielkonfiguration möglich ist und ein resampling nicht mehr nötig ist. Zudem wird die Variable \textit{solutionFound} auf true gesetzt um anzuzeigen, dass eine Lösung möglich ist.
+		\item (Zeilen 305-317) In diesen Zeilen wird der Nutzer ab 5 resamples gefragt, ob er einen weiteren Resampling-Durchlauf starten möchte oder die Ausführung des Programms erfolglos beenden möchte. Diese Abfrage haben wir eingebaut, um Endlosschleifen zu verhindern.
+		\item (Zeilen 319-333) Hier werden wieder Informationen ausgegeben und die do-while Schleife geschlossen. Außerdem wird das Programm beendet, sollte trotz Resampling keine Lösung gefunden worden sein und der Nutzer die Ausführung des Programms abgebrochen haben.
+		\item (Zeilen 335-340) Mit Hilfe der Implementierung des Dijkstra-Algorithmus in der Boost-Library wird der kürzeste Weg von der Start- zur Zielkonfiguration ermittelt. Dieser Weg ist zu diesem Zeitpunkt im Programm auf jeden Fall vorhanden, da ansonsten die Ausführung des Programms beendet worden wäre.
+		\item (Zeile 342) Die Distanz zwischen Start- und Zielkonfiguration wird ausgegeben.
+		\item (Zeile 345-353) Wieder Ausgaben zur Information
+		\item (Zeile 355-359) Hier wird rückwärts (ausgehend von der Zielkonfiguration) durch den vom Dijkstra erstellten Pfad gelaufen, um den Weg von Start- zu Zielkonfiguration zu speichern.
+		\item (Zeilen 362-374) Anschließend wird der erstellte Pfad mit Hilfe der gelieferten Methode \textit{write\_easyrob\_program\_file} in die Datei \textit{solution.prg} geschrieben und die letzten Zeitstempel ausgegeben.
+	\end{itemize} 
+\end{itemize}
+	Damit endet die Datei \textit{main.cpp} und damit auch die Beschreibung unserer Lösung.
+	
+\section*{Was wir gelernt haben}
+
+Die Implementierung hat Spass gemacht, da wir die Bewegungen des Wurms dann verfolgen konnten. Wir haben gelernt, dass die Parallelisierung der Verbindungsberechnung sehr große Vorteile bringt.
+
+\end{document}

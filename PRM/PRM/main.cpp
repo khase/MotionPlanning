@@ -63,9 +63,9 @@ int _tmain(int argc, _TCHAR* argv[])
 	knn_rtree_t rtree;
 	const float stepsize = .025f;
 
-	const int nNodes = 10000;
+	const int nNodes = 1000000;
 
-#define TEST_CASE 5
+#define TEST_CASE 4
 #ifdef TEST_CASE
 #if TEST_CASE == 0
 	// Example
@@ -212,74 +212,77 @@ int _tmain(int argc, _TCHAR* argv[])
 
 		// ###################
 
-		if (!resampling) {
-			// Startzeit
-			dwStart = GetTickCount();
-			// 3. Step: connecting start configuration to graph
-			std::cout << "3. Step: connecting start configuration to graph" << endl;
+		// Startzeit
+		dwStart = GetTickCount();
+		// 3. Step: connecting start configuration to graph
+		std::cout << "3. Step: connecting start configuration to graph" << endl;
 
-			vertex_prop_t prop;
+		vertex_prop_t prop; 
+		rtree_value val;
+		if (!resampling) {
 			prop.q_ = qStart;
 			startIndex = boost::add_vertex(prop, g);
-			rtree_value val = rtree_value(cell.Robot(), startIndex);
+			val = rtree_value(cell.Robot(), startIndex);
 			// Trage Konfiguration in kd-Tree ein
 			rtree.insert(val);
+		}
 
-			Eigen::VectorXd actVector = g[startIndex].q_;
-			std::vector<rtree_value> nearest;
-			MyWorm test = MyWorm(actVector);
-			rtree.query(bgi::nearest(test, 500), std::back_inserter(nearest));
+		Eigen::VectorXd actVector = g[startIndex].q_;
+		std::vector<rtree_value> nearest;
+		MyWorm test = MyWorm(actVector);
+		rtree.query(bgi::nearest(test, 500), std::back_inserter(nearest));
 
-			int edges = 0;
-			for (auto &q : nearest)
-			{
-				Eigen::VectorXd nearestVector = g[q.second].q_;
-				if (cell.CheckMotion(nearestVector, actVector)) {
-					float lengthOfEdge = (nearestVector - actVector).norm();
-					boost::add_edge(q.second, startIndex, lengthOfEdge, g);
-					edges++;
-				}
+		int edges = 0;
+		for (auto &q : nearest)
+		{
+			Eigen::VectorXd nearestVector = g[q.second].q_;
+			if (!boost::edge(q.second, startIndex, g).second && cell.CheckMotion(nearestVector, actVector)) {
+				float lengthOfEdge = (nearestVector - actVector).norm();
+				boost::add_edge(q.second, startIndex, lengthOfEdge, g);
+				edges++;
 			}
-			std::cout << edges << " Edges added" << endl;
+		}
+		std::cout << edges << " Edges added" << endl;
 
-			// Zeit ausgeben ( in ms )
-			dwElapsed = GetTickCount() - dwStart;
-			std::cout << "took " << dwElapsed << " ms\n\n";
+		// Zeit ausgeben ( in ms )
+		dwElapsed = GetTickCount() - dwStart;
+		std::cout << "took " << dwElapsed << " ms\n\n";
 
-			// ###################
+		// ###################
 
-			// Startzeit
-			dwStart = GetTickCount();
-			// 4. Step: connecting goal configuration to graph
-			std::cout << "4. Step: connecting goal configuration to graph" << endl;
+		// Startzeit
+		dwStart = GetTickCount();
+		// 4. Step: connecting goal configuration to graph
+		std::cout << "4. Step: connecting goal configuration to graph" << endl;
 
+		if (!resampling) {
 			prop.q_ = qGoal;
 			goalIndex = boost::add_vertex(prop, g);
 			val = rtree_value(cell.Robot(), goalIndex);
 			// Trage Konfiguration in kd-Tree ein
 			rtree.insert(val);
-
-			actVector = g[goalIndex].q_;
-			nearest;
-			test = MyWorm(actVector);
-			rtree.query(bgi::nearest(test, 500), std::back_inserter(nearest));
-
-			edges = 0;
-			for (auto &q : nearest)
-			{
-				Eigen::VectorXd nearestVector = g[q.second].q_;
-				if (cell.CheckMotion(nearestVector, actVector)) {
-					float lengthOfEdge = (nearestVector - actVector).norm();
-					boost::add_edge(q.second, goalIndex, lengthOfEdge, g);
-					edges++;
-				}
-			}
-			std::cout << edges << " Edges added" << endl;
-
-			// Zeit ausgeben ( in ms )
-			dwElapsed = GetTickCount() - dwStart;
-			std::cout << "took " << dwElapsed << " ms\n\n";
 		}
+
+		actVector = g[goalIndex].q_;
+		nearest;
+		test = MyWorm(actVector);
+		rtree.query(bgi::nearest(test, 500), std::back_inserter(nearest));
+
+		edges = 0;
+		for (auto &q : nearest)
+		{
+			Eigen::VectorXd nearestVector = g[q.second].q_;
+			if (!boost::edge(q.second, goalIndex, g).second && cell.CheckMotion(nearestVector, actVector)) {
+				float lengthOfEdge = (nearestVector - actVector).norm();
+				boost::add_edge(q.second, goalIndex, lengthOfEdge, g);
+				edges++;
+			}
+		}
+		std::cout << edges << " Edges added" << endl;
+
+		// Zeit ausgeben ( in ms )
+		dwElapsed = GetTickCount() - dwStart;
+		std::cout << "took " << dwElapsed << " ms\n\n";
 
 		// ###################
 
@@ -336,7 +339,6 @@ int _tmain(int argc, _TCHAR* argv[])
 		predecessor_map(boost::make_iterator_property_map(p.begin(), get(boost::vertex_index, g))).
 		distance_map(boost::make_iterator_property_map(d.begin(), get(boost::vertex_index, g))));
 
-	boost::graph_traits<graph_t>::vertex_iterator vi, vend;
 	std::cout << "distance to goal = " << d[goalIndex] << endl;
 
 	// Zeit ausgeben ( in ms )
