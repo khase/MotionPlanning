@@ -63,7 +63,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	knn_rtree_t rtree;
 	const float stepsize = .025f;
 
-	const int nNodes = 1000000;
+	const int nNodes = 20000;
 
 #define TEST_CASE 4
 #ifdef TEST_CASE
