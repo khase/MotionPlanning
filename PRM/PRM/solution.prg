@@ -1,0 +1,4 @@
+ProgramFile
+PTP_AX 0.598767 0.89815 -89.815 -179.63 179.63
+PTP_AX 0.6 0.9 -90 -180 180
+EndProgramFile
