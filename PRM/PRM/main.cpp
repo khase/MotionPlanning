@@ -65,7 +65,7 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	const int nNodes = 25000;
 
-#define TEST_CASE 5
+#define TEST_CASE 6
 #ifdef TEST_CASE
 #if TEST_CASE == 0
 	// Example
@@ -142,6 +142,7 @@ int _tmain(int argc, _TCHAR* argv[])
 #endif
 #endif
 
+	DWORD dwStartTotal = GetTickCount();
 	DWORD dwStart;
 	DWORD dwElapsed;
 
@@ -326,6 +327,12 @@ int _tmain(int argc, _TCHAR* argv[])
 	// Zeit ausgeben ( in ms )
 	dwElapsed = GetTickCount() - dwStart;
 	std::cout << "took " << dwElapsed << " ms\n\n";
+
+	// ###################
+
+	// Zeit ausgeben ( in ms )
+	dwElapsed = GetTickCount() - dwStartTotal;
+	std::cout << "total time took " << dwElapsed << " ms\n\n";
 
     return EXIT_SUCCESS;
 }
