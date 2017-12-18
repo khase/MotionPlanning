@@ -10,6 +10,13 @@
 #include <boost/geometry/geometries/point.hpp>
 #include <boost/geometry/geometries/box.hpp>
 #include <boost/graph/dijkstra_shortest_paths.hpp>
+#include <boost/config.hpp>
+#include <iostream>
+#include <vector>
+#include <algorithm>
+#include <utility>
+#include <boost/graph/adjacency_list.hpp>
+#include <boost/graph/connected_components.hpp>
 
 using namespace std;
 namespace bg = boost::geometry;
@@ -19,7 +26,7 @@ typedef bg::model::point<Eigen::VectorXd, 1, bg::cs::cartesian> point;
 
 
 
-int addEdges(int num, int start, int end, graph_t g, knn_rtree_t rtree)
+int addEdges(int num, int start, int end, graph_t &g, knn_rtree_t &rtree)
 {
 	WormCell cell;
 	std::cout << num << " building from " << start << " to " << end << endl;
@@ -31,7 +38,7 @@ int addEdges(int num, int start, int end, graph_t g, knn_rtree_t rtree)
 		Eigen::VectorXd actVector = g[vert].q_;
 		std::vector<rtree_value> nearest;
 		MyWorm test = MyWorm(actVector);
-		rtree.query(bgi::nearest(test, 15), std::back_inserter(nearest));
+		rtree.query(bgi::nearest(test, 5), std::back_inserter(nearest));
 
 
 		for (auto &q : nearest)
@@ -53,9 +60,11 @@ int _tmain(int argc, _TCHAR* argv[])
     vector<Eigen::VectorXd> path; // create a point vector for storing the path
     graph_t g;
     knn_rtree_t rtree;
-    const float stepsize = .025f;
+	const float stepsize = .025f;
 
-#define TEST_CASE 5
+	const int nNodes = 90000;
+
+#define TEST_CASE 4
 #ifdef TEST_CASE
 #if TEST_CASE == 0
 	// Example
@@ -137,7 +146,6 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	// Startzeit
 	dwStart = GetTickCount();
-    const int nNodes = 50000;
     // 1. step: building up a graph g consisting of nNodes vertices
 	std::cout << "1. Step: building " << nNodes << " nodes for the graph" << endl;
 
@@ -279,6 +287,14 @@ int _tmain(int argc, _TCHAR* argv[])
 	dwStart = GetTickCount();
     // 5. Step: searching for shortest path
 	std::cout << "5. Step: searching for shortest path" << endl;
+
+
+	std::vector<int> component(num_vertices(g));
+	int num = connected_components(g, &component[0]);
+	std::cout << num << " Components" << endl;
+	if (component[startIndex] != component[goalIndex]){
+		std::cout << "NoConnection!" << endl;
+	}
 
 	std::vector<vertex_t> p(num_vertices(g));
 	std::vector<float> d(num_vertices(g));
