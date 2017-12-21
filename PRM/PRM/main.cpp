@@ -31,14 +31,14 @@ int addEdges(int num, int start, int end, graph_t &g, knn_rtree_t &rtree)
 	WormCell cell;
 	int edges = 0;
 	for (int index = start; index < end; index++) {
-		if (index % 500 == 0) {
+		if (index % 10 == 0) {
 			std::cout << ".";
 		}
 		vertex_t vert = vertex_t(index);
 		Eigen::VectorXd actVector = g[vert].q_;
 		std::vector<rtree_value> nearest;
 		MyWorm test = MyWorm(actVector);
-		rtree.query(bgi::nearest(test, 10), std::back_inserter(nearest));
+		rtree.query(bgi::nearest(test, 2), std::back_inserter(nearest));
 
 
 		for (auto &q : nearest)
@@ -63,7 +63,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	knn_rtree_t rtree;
 	const float stepsize = .025f;
 
-	const int nNodes = 20000;
+	const int nNodes = 1000;
 
 #define TEST_CASE 4
 #ifdef TEST_CASE
@@ -302,7 +302,7 @@ int _tmain(int argc, _TCHAR* argv[])
 			std::cout << "Solution found after " << resamplesDone << " resample(s)." << endl;
 		}
 
-		if (resamplesDone >= 5 && !solutionFound){
+		if (resamplesDone >= 100 && !solutionFound){
 			cout << " Already " << resamplesDone << " resamples were processed but there ist still no solution.\r\n  Would you like to continue?\r\n  y / n  ";
 			string shouldResample;
 			std::cin >> shouldResample;
