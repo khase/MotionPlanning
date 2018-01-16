@@ -148,9 +148,9 @@ int _tmain(int argc, _TCHAR* argv[])
 	const float stepsize = .025f;
 	boost::mt19937 rng;
 
-	const int nNodes = 2000;
+	const int nNodes = 5000;
 
-#define TEST_CASE 1
+#define TEST_CASE 3
 #ifdef TEST_CASE
 #if TEST_CASE == 0
 	// Example
