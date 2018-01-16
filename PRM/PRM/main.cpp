@@ -18,6 +18,9 @@
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/connected_components.hpp>
 
+#include <boost/random.hpp>
+#include <boost/random/normal_distribution.hpp> // for normal distribution
+
 using namespace std;
 namespace bg = boost::geometry;
 namespace bgi = boost::geometry::index;
@@ -26,19 +29,20 @@ typedef bg::model::point<Eigen::VectorXd, 1, bg::cs::cartesian> point;
 
 
 
+
 int addEdges(int num, int start, int end, graph_t &g, knn_rtree_t &rtree)
 {
 	WormCell cell;
 	int edges = 0;
 	for (int index = start; index < end; index++) {
-		if (index % 10 == 0) {
+		if (index % 100 == 0) {
 			std::cout << ".";
 		}
 		vertex_t vert = vertex_t(index);
 		Eigen::VectorXd actVector = g[vert].q_;
 		std::vector<rtree_value> nearest;
 		MyWorm test = MyWorm(actVector);
-		rtree.query(bgi::nearest(test, 2), std::back_inserter(nearest));
+		rtree.query(bgi::nearest(test, 7), std::back_inserter(nearest));
 
 
 		for (auto &q : nearest)
@@ -53,6 +57,86 @@ int addEdges(int num, int start, int end, graph_t &g, knn_rtree_t &rtree)
 	}
 	return 0;
 }
+
+int resample(int nNodes, graph_t &g, knn_rtree_t &rtree, WormCell &cell, boost::mt19937 &rng)
+{
+	int index = 0;
+	while (index < nNodes){
+
+		Eigen::VectorXd actVector;
+
+		actVector = cell.NextRandomCspace();
+		if (!MyWorm::IsInsideRange(actVector))
+			continue;
+
+		double newVectorValues[5];
+		bool newVectorOkay = true;
+
+		for (int i = 0; i < 5; i++)
+		{
+			int radius = 0.07;
+			if (i >= 2)
+				radius = 1;
+
+			boost::normal_distribution<> nd(actVector[i], radius);
+			
+			boost::variate_generator<boost::mt19937&,
+				boost::normal_distribution<> > var_nor(rng, nd);
+			double newValue = var_nor();
+			newVectorValues[i] = newValue;
+		}
+
+		Eigen::VectorXd newVector(5);
+
+		newVector << newVectorValues[0], newVectorValues[1], newVectorValues[2], newVectorValues[3], newVectorValues[4];
+
+		if (cell.CheckPosition(actVector) == cell.CheckPosition(newVector) || !MyWorm::IsInsideRange(newVector)) {
+			continue;
+		}
+		// erstelle vertex Descriptor
+		vertex_prop_t prop;
+
+		if (cell.CheckPosition(actVector))
+		{
+			prop.q_ = actVector;
+		}
+		else if (cell.CheckPosition(newVector))
+		{
+			prop.q_ = newVector;
+		}
+
+		// generiere zufällige Konfiguration
+		vertex_t vert = boost::add_vertex(prop, g);
+
+		// Trage Konfiguration in kd-Tree ein
+		rtree_value val = rtree_value(cell.Robot(), vert);
+		index++;
+		
+		if (index % (nNodes/10) == 0)
+			std::cout << ".";
+		rtree.insert(val);
+	}
+	return 0;
+}
+
+int buildRandomNodes(int nNodes, graph_t &g, knn_rtree_t &rtree, WormCell &cell){
+	for (int index = 0; index < nNodes; index++) {
+		// erstelle vertex Descriptor
+		vertex_prop_t prop;
+		// generiere zufällige, kollisionsfreie Konfiguration
+		prop.q_ = cell.NextRandomCfree();
+
+		vertex_t vert = boost::add_vertex(prop, g);
+
+		// Trage Konfiguration in kd-Tree ein
+		rtree_value val = rtree_value(cell.Robot(), vert);
+		rtree.insert(val);
+		if (index % (nNodes / 10) == 0)
+			std::cout << ".";
+	}
+	return 0;
+}
+
 /***********************************************************************************************************************************/
 int _tmain(int argc, _TCHAR* argv[])
 {
@@ -62,10 +146,11 @@ int _tmain(int argc, _TCHAR* argv[])
 	graph_t g;
 	knn_rtree_t rtree;
 	const float stepsize = .025f;
+	boost::mt19937 rng;
 
-	const int nNodes = 1000;
+	const int nNodes = 2000;
 
-#define TEST_CASE 4
+#define TEST_CASE 1
 #ifdef TEST_CASE
 #if TEST_CASE == 0
 	// Example
@@ -164,34 +249,43 @@ int _tmain(int argc, _TCHAR* argv[])
 		return 0;
 	}
 
+	if (!MyWorm::IsInsideRange(qStart)){
+		cout << "Startposition ausserhalb des Arbeitsraums!" << endl;
+	return 0;
+	}
+		
+	if (!MyWorm::IsInsideRange(qGoal)){
+		cout << "Endposition ausserhalb des Arbeitsraums!" << endl;
+		return 0;
+	}
+
 
 	do {
 		// Startzeit
 		resamplesDone++;
 		dwStart = GetTickCount();
 		// 1. step: building up a graph g consisting of nNodes vertices
-		std::cout << "1. Step: building " << nNodes << " nodes for the graph" << endl;
 
-		for (int index = 0; index < nNodes; index++) {
-			// erstelle vertex Descriptor
-			vertex_prop_t prop;
-			// generiere zufällige, kollisionsfreie Konfiguration
-			prop.q_ = cell.NextRandomCfree();
-			vertex_t vert = boost::add_vertex(prop, g);
-
-			// Trage Konfiguration in kd-Tree ein
-			rtree_value val = rtree_value(cell.Robot(), vert);
-			rtree.insert(val);
+		if (!resampling) {
+			std::cout << "1. Step: building " << nNodes << " random nodes for the graph" << endl; 
+			buildRandomNodes(nNodes, std::ref(g), std::ref(rtree), std::ref(cell));
+		}
+		else
+		{
+			std::cout << "1. Step: Resampling. Building " << nNodes*0.8 << " nodes near obstacles and " << nNodes*0.2 << " random nodes for the graph" << endl;
+			resample(nNodes*0.8, std::ref(g), std::ref(rtree), std::ref(cell), std::ref(rng));
+			buildRandomNodes(nNodes * 0.2, std::ref(g), std::ref(rtree), std::ref(cell));
 		}
 
 		// Zeit ausgeben ( in ms )
 		dwElapsed = GetTickCount() - dwStart;
-		std::cout << "took " << dwElapsed << " ms\n\n";
+		std::cout << endl << "took " << dwElapsed << " ms\n\n";
 
 		// ###################	
 
 		// Startzeit
 		dwStart = GetTickCount();
+		int connectedNotesBefore = g.m_edges.size();
 		// 2. step: building edges for the graph, if the connection of 2 nodes are in free space
 		std::cout << "2. Step: buildung edges for the graph" << endl;
 		const int numThreads = 8;
@@ -203,8 +297,8 @@ int _tmain(int argc, _TCHAR* argv[])
 		for (auto& t : threads) {
 			t.join();
 		}
-		connectedNodes = g.m_vertices.size();
-		std::cout << endl << g.m_edges.size() << " edges added" << endl;
+		connectedNodes = g.m_edges.size() - connectedNotesBefore;
+		std::cout << endl << connectedNodes << " edges added" << endl;
 
 		// Zeit ausgeben ( in ms )
 		dwElapsed = GetTickCount() - dwStart;
@@ -299,7 +393,7 @@ int _tmain(int argc, _TCHAR* argv[])
 		else {
 			resampling = false;
 			solutionFound = true;
-			std::cout << "Solution found after " << resamplesDone << " resample(s)." << endl;
+			std::cout << "Solution found after " << resamplesDone-1 << " resample(s)." << endl;
 		}
 
 		if (resamplesDone >= 100 && !solutionFound){
