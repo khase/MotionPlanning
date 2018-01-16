@@ -75,13 +75,73 @@ void write_gnuplot_file2(graph_t g, string filename)
 	myfile.close();
 }
 
+string stringf(const char* format, ...)
+{
+	va_list args;
+	va_start(args, format);
+
+	int size = _vscprintf(format, args) + 1;
+	std::unique_ptr<char[]> buf(new char[size]);
+
+#ifndef _MSC_VER
+	vsnprintf(buf.get(), size, format, args);
+#else
+	vsnprintf_s(buf.get(), size, _TRUNCATE, format, args);
+#endif
+
+	va_end(args);
+
+	return string(buf.get());
+}
+
+string toString(const Eigen::VectorXd& vect)
+{
+	return stringf("[%f, %f, %f, %f, %f]", vect[0], vect[1], vect[2], vect[3], vect[4]);
+}
+
+Eigen::VectorXd getVector(vertex_t vert, graph_t &g) {
+	return g[vert].q_;
+}
+
+vertex_t addVertex(Eigen::VectorXd vertex, WormCell &cell, graph_t &g, knn_rtree_t &rtree) {
+	vertex_prop_t prop;
+	prop.q_ = vertex;
+	vertex_t vert = boost::add_vertex(prop, g);
+
+	rtree_value val;
+	val = rtree_value(cell.Robot(), vert);
+	rtree.insert(val);
+
+	return vert;
+}
+
+std::vector<rtree_value> findNearest(Eigen::VectorXd vertex, int count, knn_rtree_t &rtree) {
+	Eigen::VectorXd actVector = vertex;
+	std::vector<rtree_value> nearest;
+	MyWorm test = MyWorm(actVector);
+	rtree.query(bgi::nearest(test, count), std::back_inserter(nearest));
+
+	return nearest;
+}
+
+Eigen::VectorXd doStep(Eigen::VectorXd vertex, Eigen::VectorXd goal, double stepSize) {
+	Eigen::VectorXd heading = goal - vertex;
+	if (heading.norm() <= stepSize) {
+		std::cout << toString(vertex) << " -> " << toString(goal) << " check" << endl;
+		return goal;
+	}
+	heading.normalize();
+	std::cout << toString(vertex) << " -> " << toString(vertex + (heading * stepSize)) << endl;
+	return vertex + (heading * stepSize);
+}
+
 /***********************************************************************************************************************************/
 int _tmain(int argc, _TCHAR* argv[])
 {
 	DWORD dwStartTotal = GetTickCount();
 	DWORD dwStart;
 	DWORD dwElapsed;
-#define AUFGABE 1
+#define AUFGABE 2
 #ifdef AUFGABE
 #if AUFGABE == 1
 	std::cout << "Aufgabe 1" << endl;
@@ -111,18 +171,20 @@ int _tmain(int argc, _TCHAR* argv[])
 	dwStart = GetTickCount();
 	std::cout << "Exploring..." << endl;
 	for (int i = 1; i <= k; i++) {
-		double rand = random(generator);
+		// generate random configuration
 		Eigen::VectorXd qNext(2);
 		qNext << random(generator), random(generator);
 		vertex_prop_t nextVertex;
 		nextVertex.q_ = qNext;
+		// add vertex to graph
 		vertex_t nextVertexIndex = boost::add_vertex(nextVertex, g);
 
-
+		// find nearest neighbour
 		std::vector<rtree_value> nearest;
 		boostPoint test = boostPoint(qNext[0], qNext[1]);
 		rtree.query(bgi::nearest(test, nearestSearch), std::back_inserter(nearest));
 		for (int j = 0; j < nearestSearch; j++) {
+			// build connection
 			Eigen::VectorXd nearVect(2);
 			nearVect << nearest[j].first.get<0>(), nearest[j].first.get<1>();
 			Eigen::VectorXd heading = (qNext - nearVect).normalized();
@@ -131,6 +193,7 @@ int _tmain(int argc, _TCHAR* argv[])
 			vertex_t actIndex = nearest[j].second;
 			// add intermediates
 			while (act != qNext) {
+				// step towards the new configuration
 				Eigen::VectorXd n;
 				if ((qNext - act).norm() > stepSize) {
 					n = act + (heading * stepSize);
@@ -138,6 +201,7 @@ int _tmain(int argc, _TCHAR* argv[])
 				else {
 					n = qNext;
 				}
+				// add vertex to graph
 				vertex_prop_t nprop;
 				nprop.q_ = n;
 				vertex_t nIndex = boost::add_vertex(nprop, g);
@@ -154,7 +218,14 @@ int _tmain(int argc, _TCHAR* argv[])
 			}
 		}
 		dwElapsed = GetTickCount() - dwStart;
-		std::cout << "\r" << i << "/" << k << " (" << (dwElapsed / i * (k - i) / 1000) << "s remaining)";
+		std::cout << "\r" << i << "/" << k;
+		// save current graph after each 10%
+		if (i % (k/10) == 0) {
+			std::cout << " (" << (dwElapsed / i * (k - i) / 1000) << "s remaining) ";
+			std::stringstream nameBuilder;
+			nameBuilder << "graph-" << i / (k/10) << ".dat";
+			write_gnuplot_file2(g, nameBuilder.str());
+		}
 	}
 	std::cout << endl;
 	dwElapsed = GetTickCount() - dwStart;
@@ -167,12 +238,13 @@ int _tmain(int argc, _TCHAR* argv[])
 	WormCell cell;
 	Eigen::VectorXd qStart(5), qGoal(5), q(5);
 	vector<Eigen::VectorXd> path; // create a point vector for storing the path
-	graph_t g;
-	knn_rtree_t rtree;
+	graph_t g, gStart, gGoal;
+	knn_rtree_t rtree, rtreeStart, rtreeGoal;
 	const float stepsize = .025f;
+	const float graphstepsize = .1f;
 
 	const int nNodes = 25000;
-#define TEST_CASE 0
+#define TEST_CASE 1
 #ifdef TEST_CASE
 #if TEST_CASE == 0
 	// Example
@@ -250,10 +322,8 @@ int _tmain(int argc, _TCHAR* argv[])
 #endif
 
 	g = graph_t(0);
-	int connectedNodes = 0;
-	bool resampling = false;
-	int resamplesDone = 0;
-	bool solutionFound = false;
+	gStart = graph_t(0);
+	gGoal = graph_t(0);
 
 	vertex_t startIndex;
 	vertex_t goalIndex;
@@ -269,40 +339,95 @@ int _tmain(int argc, _TCHAR* argv[])
 
 
 	// Startzeit
-	resamplesDone++;
 	dwStart = GetTickCount();
 	// 1. step: building up a graph g consisting of nNodes vertices
-	std::cout << "1. Step: building " << nNodes << " nodes for the RRT-graph" << endl;
+	std::cout << "Exploring..." << endl;
 
-	for (int index = 0; index < nNodes; index++) {
+	vertex_t startInGlobalGraph = addVertex(qStart, std::ref(cell), std::ref(g), std::ref(rtree));
+	vertex_t startInStartGraph = addVertex(qStart, std::ref(cell), std::ref(gStart), std::ref(rtreeStart));
+
+	vertex_t goalInGlobalGraph = addVertex(qGoal, std::ref(cell), std::ref(g), std::ref(rtree));
+	vertex_t goalInGoalGraph = addVertex(qGoal, std::ref(cell), std::ref(gGoal), std::ref(rtreeGoal));
+
+	bool connected = false;
+	while (!connected) {
+		// random exploring for goal-tree
+		// Magic do not touch
+		Eigen::VectorXd target;
+		if (true) {
+			Eigen::VectorXd heading = cell.NextRandomCspace();
+
+			rtree_value val = findNearest(heading, 1, std::ref(rtreeGoal))[0];
+			Eigen::VectorXd actGoal = getVector(val.second, std::ref(gGoal));
+			Eigen::VectorXd qNew = doStep(actGoal, heading, graphstepsize);
+			float length = (qNew - actGoal).norm();
+
+			// expand goal graph
+			vertex_t vertNew;
+			vertNew = addVertex(qNew, std::ref(cell), std::ref(gGoal), std::ref(rtreeGoal));
+			boost::add_edge(val.second, vertNew, length, gGoal);
+			// add same vertex/edge to global graph
+			vertNew = addVertex(qNew, std::ref(cell), std::ref(g), std::ref(rtree));
+			boost::add_edge(findNearest(actGoal, 1, std::ref(rtree))[0].second, vertNew, length, g);
+
+			target = qNew;
+		}
+
+		// start tree should expand heading towards goal tree
+		// Magic do not touch
+		if (true) {
+			rtree_value val = findNearest(target, 1, std::ref(rtreeStart))[0];
+			vertex_t actStartIndex = val.second;
+			Eigen::VectorXd actStart = getVector(val.second, std::ref(gStart));
+
+			bool hitObst = false;
+			do {
+				Eigen::VectorXd qNew = doStep(actStart, target, graphstepsize);
+				float length = (qNew - actStart).norm();
+
+				// check motion (is possible??)
+				if (!cell.CheckMotion(actStart, qNew)) {
+					hitObst = true;
+					break;
+				}
+
+				if (qNew.isApprox(target, stepsize/ 10)) {
+					// reached Target
+
+					rtree_value connectVal = findNearest(target, 1, std::ref(rtree))[0];
+
+					// connect start and goal graph
+					boost::add_edge(
+						findNearest(actStart, 1, std::ref(rtree))[0].second,
+						findNearest(target, 1, std::ref(rtree))[0].second,
+						length, 
+						g);
+
+					break;
+				}
+				else {
+					// expand start graph
+					vertex_t vertNew;
+					vertNew = addVertex(qNew, std::ref(cell), std::ref(gStart), std::ref(rtreeStart));
+					boost::add_edge(actStartIndex, vertNew, length, gStart);
+					actStartIndex = vertNew;
+
+					// add same vertex/edge to global graph
+					vertNew = addVertex(qNew, std::ref(cell), std::ref(g), std::ref(rtree));
+					boost::add_edge(findNearest(actStart, 1, rtree)[0].second, vertNew, length, g);
+
+					actStart = qNew;
+				}
+			} while (!hitObst);
+
+			if (!hitObst) {
+				// graphs connected
+				connected = true;
+				break;
+			}
+		}
 
 	}
-
-	// Zeit ausgeben ( in ms )
-	dwElapsed = GetTickCount() - dwStart;
-	std::cout << "took " << dwElapsed << " ms\n\n";
-
-	// ###################
-
-	// Startzeit
-	dwStart = GetTickCount();
-	// 3. Step: connecting start configuration to graph
-	std::cout << "2. Step: connecting start configuration to graph" << endl;
-
-
-
-	// Zeit ausgeben ( in ms )
-	dwElapsed = GetTickCount() - dwStart;
-	std::cout << "took " << dwElapsed << " ms\n\n";
-
-	// ###################
-
-	// Startzeit
-	dwStart = GetTickCount();
-	// 4. Step: connecting goal configuration to graph
-	std::cout << "3. Step: connecting goal configuration to graph" << endl;
-
-
 
 	// Zeit ausgeben ( in ms )
 	dwElapsed = GetTickCount() - dwStart;
@@ -318,14 +443,29 @@ int _tmain(int argc, _TCHAR* argv[])
 	// 5. Step: searching for shortest path
 	std::cout << "4. Step: searching for shortest path" << endl;
 
-	std::vector<vertex_t> p(num_vertices(g));
-	std::vector<float> d(num_vertices(g));
+	std::vector<int> component(num_vertices(g));
+	std::cout << g.m_vertices.size() << " Vertices" << endl;
+	std::cout << g.m_edges.size() << " Edges" << endl;
+	if (g.m_vertices.size() > 0) {
+		int num = connected_components(g, &component[0]);
+		std::cout << num << " Components" << endl;
+		if (g.m_vertices.size() > 0 && component[startInGlobalGraph] == component[goalInGlobalGraph]) {
+			std::vector<vertex_t> p(num_vertices(g));
+			std::vector<float> d(num_vertices(g));
 
-	boost::dijkstra_shortest_paths(g, startIndex,
-		predecessor_map(boost::make_iterator_property_map(p.begin(), get(boost::vertex_index, g))).
-		distance_map(boost::make_iterator_property_map(d.begin(), get(boost::vertex_index, g))));
+			boost::dijkstra_shortest_paths(g, startInGlobalGraph,
+				predecessor_map(boost::make_iterator_property_map(p.begin(), get(boost::vertex_index, g))).
+				distance_map(boost::make_iterator_property_map(d.begin(), get(boost::vertex_index, g))));
 
-	std::cout << "distance to goal = " << d[goalIndex] << endl;
+			std::cout << "distance to goal = " << d[goalInGlobalGraph] << endl;
+		}
+		else {
+			std::cout << "Graph not connected" << endl;
+		}
+	}
+	else {
+		std::cout << "Graph has no vertices" << endl;
+	}
 
 	// Zeit ausgeben ( in ms )
 	dwElapsed = GetTickCount() - dwStart;
