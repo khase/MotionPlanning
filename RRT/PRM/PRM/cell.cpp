@@ -106,7 +106,7 @@ void write_easyrob_program_file(std::vector<Eigen::VectorXd> path, std::string f
 
     for (int i = path.size() - 1; i >= 0; --i)
     {
-        if (jump_to)
+        if (jump_to || i == path.size() - 1)
             myfile << "JUMP_TO_AX ";
         else
             myfile << "PTP_AX ";
