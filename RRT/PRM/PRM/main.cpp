@@ -109,8 +109,17 @@ vertex_t addVertex(Eigen::VectorXd vertex, WormCell &cell, graph_t &g, knn_rtree
 	vertex_t vert = boost::add_vertex(prop, g);
 
 	rtree_value val;
-	val = rtree_value(cell.Robot(), vert);
+	MyWorm robot = cell.Robot();
+	robot.q() = vertex;
+	val = rtree_value(robot, vert);
 	rtree.insert(val);
+
+	return vert;
+}
+
+
+vertex_t addIntermediates(Eigen::VectorXd from, Eigen::VectorXd to, WormCell &cell, graph_t &g, knn_rtree_t &rtree, double stepsize) {
+	vertex_t vert;
 
 	return vert;
 }
@@ -127,12 +136,96 @@ std::vector<rtree_value> findNearest(Eigen::VectorXd vertex, int count, knn_rtre
 Eigen::VectorXd doStep(Eigen::VectorXd vertex, Eigen::VectorXd goal, double stepSize) {
 	Eigen::VectorXd heading = goal - vertex;
 	if (heading.norm() <= stepSize) {
-		std::cout << toString(vertex) << " -> " << toString(goal) << " check" << endl;
+		// std::cout << toString(vertex) << " -> " << toString(goal) << " check" << endl;
 		return goal;
 	}
 	heading.normalize();
-	std::cout << toString(vertex) << " -> " << toString(vertex + (heading * stepSize)) << endl;
+	// std::cout << toString(vertex) << " -> " << toString(vertex + (heading * stepSize)) << endl;
 	return vertex + (heading * stepSize);
+}
+
+Eigen::VectorXd exploreRandom(graph_t &g, knn_rtree_t &rtree, WormCell &cell, double stepSize, graph_t &gGlobal, knn_rtree_t &rtreeGlobal) {
+	// do until on expantion was successful
+	while (true) {
+		// generate random configuration
+		Eigen::VectorXd heading = cell.NextRandomCspace();
+
+		// find nearest config in current graph
+		rtree_value val = findNearest(heading, 1, std::ref(rtree))[0];
+		Eigen::VectorXd act = getVector(val.second, std::ref(g));
+
+		// do one step towards random config
+		Eigen::VectorXd qNew = doStep(act, heading, stepSize);
+
+		// check motion (is possible??)
+		if (cell.CheckMotion(act, qNew)) {
+			// expand graph (add intermediates)
+			double intermediateStepSize = stepSize / 10;
+			do {
+				Eigen::VectorXd intermediate = doStep(act, qNew, intermediateStepSize);
+				float length = (intermediate - act).norm();
+
+				vertex_t vertNew;
+				vertNew = addVertex(qNew, std::ref(cell), std::ref(g), std::ref(rtree));
+				boost::add_edge(findNearest(act, 1, std::ref(rtree))[0].second, vertNew, length, g);
+				// add same vertex/edge to global graph
+				vertNew = addVertex(qNew, std::ref(cell), std::ref(gGlobal), std::ref(rtreeGlobal));
+				boost::add_edge(findNearest(act, 1, std::ref(rtreeGlobal))[0].second, vertNew, length, gGlobal);
+
+				act = intermediate;
+			} while (act.isApprox(qNew, intermediateStepSize / 10));
+
+			// return newly explored config
+			return qNew;
+		}
+	}
+}
+
+bool expandTowards(graph_t &g, knn_rtree_t &rtree, WormCell &cell, double stepSize, Eigen::VectorXd target, graph_t &gGlobal, knn_rtree_t &rtreeGlobal) {
+	// find nearest existing Vector
+	rtree_value val = findNearest(target, 1, std::ref(rtree))[0];
+	vertex_t actIndex = val.second;
+	Eigen::VectorXd act = getVector(val.second, std::ref(g));
+
+	// do until connected or obstacle is hit
+	do {
+		// do one step towards the target
+		Eigen::VectorXd qNew = doStep(act, target, stepSize);
+		float length = (qNew - act).norm();
+
+		// check motion (is possible??)
+		if (!cell.CheckMotion(act, qNew)) {
+			return false;
+		}
+
+		if (qNew.isApprox(target, stepSize / 10)) {
+			// reached Target
+			rtree_value connectVal = findNearest(target, 1, std::ref(rtree))[0];
+
+			// connect start and goal components in global graph
+			boost::add_edge(
+				findNearest(act, 1, std::ref(rtreeGlobal))[0].second,
+				findNearest(target, 1, std::ref(rtreeGlobal))[0].second,
+				length,
+				gGlobal);
+
+			return true;
+		}
+		else {
+			// expand graph
+			vertex_t vertNew;
+			vertNew = addVertex(qNew, std::ref(cell), std::ref(g), std::ref(rtree));
+			boost::add_edge(actIndex, vertNew, length, g);
+			actIndex = vertNew;
+
+			// add same vertex/edge to global graph
+			vertNew = addVertex(qNew, std::ref(cell), std::ref(gGlobal), std::ref(rtreeGlobal));
+			boost::add_edge(findNearest(act, 1, rtreeGlobal)[0].second, vertNew, length, gGlobal);
+
+			act = qNew;
+		}
+	} while (true);
+	return false;
 }
 
 /***********************************************************************************************************************************/
@@ -328,12 +421,22 @@ int _tmain(int argc, _TCHAR* argv[])
 	vertex_t startIndex;
 	vertex_t goalIndex;
 
-	if (!cell.CheckPosition(qStart)){
+	if (!cell.CheckPosition(qStart)) {
 		cout << "Startposition ungueltig!" << endl;
 		return 0;
 	}
-	if (!cell.CheckPosition(qGoal)){
+	if (!cell.CheckPosition(qGoal)) {
 		cout << "Endposition ungueltig!" << endl;
+		return 0;
+	}
+
+	if (!MyWorm::IsInsideRange(qStart)) {
+		cout << "Startposition ausserhalb des Arbeitsraums!" << endl;
+		return 0;
+	}
+
+	if (!MyWorm::IsInsideRange(qGoal)) {
+		cout << "Endposition ausserhalb des Arbeitsraums!" << endl;
 		return 0;
 	}
 
@@ -351,82 +454,49 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	bool connected = false;
 	while (!connected) {
-		// random exploring for goal-tree
 		// Magic do not touch
-		Eigen::VectorXd target;
-		if (true) {
-			Eigen::VectorXd heading = cell.NextRandomCspace();
+		if (!connected) {
+			// random exploring for goal-tree
+			Eigen::VectorXd target = exploreRandom(
+				std::ref(gGoal),
+				std::ref(rtreeGoal),
+				std::ref(cell),
+				graphstepsize,
+				std::ref(g),
+				std::ref(rtree));
 
-			rtree_value val = findNearest(heading, 1, std::ref(rtreeGoal))[0];
-			Eigen::VectorXd actGoal = getVector(val.second, std::ref(gGoal));
-			Eigen::VectorXd qNew = doStep(actGoal, heading, graphstepsize);
-			float length = (qNew - actGoal).norm();
-
-			// expand goal graph
-			vertex_t vertNew;
-			vertNew = addVertex(qNew, std::ref(cell), std::ref(gGoal), std::ref(rtreeGoal));
-			boost::add_edge(val.second, vertNew, length, gGoal);
-			// add same vertex/edge to global graph
-			vertNew = addVertex(qNew, std::ref(cell), std::ref(g), std::ref(rtree));
-			boost::add_edge(findNearest(actGoal, 1, std::ref(rtree))[0].second, vertNew, length, g);
-
-			target = qNew;
+			// try to connect from start to goal
+			connected |= expandTowards(
+				std::ref(gStart),
+				std::ref(rtreeStart),
+				std::ref(cell),
+				graphstepsize,
+				target,
+				std::ref(g),
+				std::ref(rtree));
 		}
-
-		// start tree should expand heading towards goal tree
 		// Magic do not touch
-		if (true) {
-			rtree_value val = findNearest(target, 1, std::ref(rtreeStart))[0];
-			vertex_t actStartIndex = val.second;
-			Eigen::VectorXd actStart = getVector(val.second, std::ref(gStart));
+		if (!connected) {
+			// random exploring for start-tree
+			Eigen::VectorXd target = exploreRandom(
+				std::ref(gStart),
+				std::ref(rtreeStart),
+				std::ref(cell),
+				graphstepsize,
+				std::ref(g),
+				std::ref(rtree));
 
-			bool hitObst = false;
-			do {
-				Eigen::VectorXd qNew = doStep(actStart, target, graphstepsize);
-				float length = (qNew - actStart).norm();
-
-				// check motion (is possible??)
-				if (!cell.CheckMotion(actStart, qNew)) {
-					hitObst = true;
-					break;
-				}
-
-				if (qNew.isApprox(target, stepsize/ 10)) {
-					// reached Target
-
-					rtree_value connectVal = findNearest(target, 1, std::ref(rtree))[0];
-
-					// connect start and goal graph
-					boost::add_edge(
-						findNearest(actStart, 1, std::ref(rtree))[0].second,
-						findNearest(target, 1, std::ref(rtree))[0].second,
-						length, 
-						g);
-
-					break;
-				}
-				else {
-					// expand start graph
-					vertex_t vertNew;
-					vertNew = addVertex(qNew, std::ref(cell), std::ref(gStart), std::ref(rtreeStart));
-					boost::add_edge(actStartIndex, vertNew, length, gStart);
-					actStartIndex = vertNew;
-
-					// add same vertex/edge to global graph
-					vertNew = addVertex(qNew, std::ref(cell), std::ref(g), std::ref(rtree));
-					boost::add_edge(findNearest(actStart, 1, rtree)[0].second, vertNew, length, g);
-
-					actStart = qNew;
-				}
-			} while (!hitObst);
-
-			if (!hitObst) {
-				// graphs connected
-				connected = true;
-				break;
-			}
+			// try to connect from goal to start
+			connected |= expandTowards(
+				std::ref(gGoal),
+				std::ref(rtreeGoal),
+				std::ref(cell),
+				graphstepsize,
+				std::ref(target),
+				std::ref(g),
+				std::ref(rtree));
 		}
-
+		
 	}
 
 	// Zeit ausgeben ( in ms )
@@ -435,6 +505,16 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	// ###################
 
+	std::cout << "Metrics for start graph:" << endl;
+	std::cout << "  Vertices:" << gStart.m_vertices.size() << endl;
+	std::cout << "  Edges:" << gStart.m_edges.size() << endl;
+	std::cout << "Metrics for goal graph:" << endl;
+	std::cout << "  Vertices:" << gGoal.m_vertices.size() << endl;
+	std::cout << "  Edges:" << gGoal.m_edges.size() << endl;
+	std::cout << "Metrics for Global graph:" << endl;
+	std::cout << "  Vertices:" << g.m_vertices.size() << endl;
+	std::cout << "  Edges:" << g.m_edges.size() << endl;
+	std::cout << endl;
 
 	// ###################
 
@@ -444,14 +524,13 @@ int _tmain(int argc, _TCHAR* argv[])
 	std::cout << "4. Step: searching for shortest path" << endl;
 
 	std::vector<int> component(num_vertices(g));
-	std::cout << g.m_vertices.size() << " Vertices" << endl;
-	std::cout << g.m_edges.size() << " Edges" << endl;
+
+	std::vector<vertex_t> p(num_vertices(g));
+	std::vector<float> d(num_vertices(g));
 	if (g.m_vertices.size() > 0) {
 		int num = connected_components(g, &component[0]);
-		std::cout << num << " Components" << endl;
+		// std::cout << num << " Components" << endl;
 		if (g.m_vertices.size() > 0 && component[startInGlobalGraph] == component[goalInGlobalGraph]) {
-			std::vector<vertex_t> p(num_vertices(g));
-			std::vector<float> d(num_vertices(g));
 
 			boost::dijkstra_shortest_paths(g, startInGlobalGraph,
 				predecessor_map(boost::make_iterator_property_map(p.begin(), get(boost::vertex_index, g))).
@@ -478,18 +557,28 @@ int _tmain(int argc, _TCHAR* argv[])
 	// 6. Step: building easyrob path
 	std::cout << "5. Step: building easyrob path" << endl;
 
+	vertex_t current = goalInGlobalGraph;
+	while (current != startInGlobalGraph) {
+		path.push_back(g[current].q_);
+		current = p[current];
+	}
+	path.push_back(g[startInGlobalGraph].q_);
+
+	write_easyrob_program_file(path, "solution.prg", false);
+
 	// Zeit ausgeben ( in ms )
 	dwElapsed = GetTickCount() - dwStart;
 	std::cout << "took " << dwElapsed << " ms\n\n";
 
 	// ###################
 
-	return EXIT_SUCCESS;
 #endif
 #endif // AUFGABE
 
 	// Zeit ausgeben ( in ms )
 	dwElapsed = GetTickCount() - dwStartTotal;
 	std::cout << "total time took " << dwElapsed << " ms\n\n";
+
+	return EXIT_SUCCESS;
 }
 
