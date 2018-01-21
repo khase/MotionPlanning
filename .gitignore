@@ -275,3 +275,9 @@ PotentialFieldMethod/data/
 
 !**/**/*.vcxproj
 PRM/PRM_David_Welsch.Ken_Hasenbank.zip
+
+Seminar/PrintOptimizer/\.vs/
+
+Seminar/PrintOptimizer/PrintOptimizer/obj/
+
+Seminar/PrintOptimizer/PrintOptimizer/bin/
