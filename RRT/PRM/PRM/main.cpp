@@ -237,7 +237,7 @@ int _tmain(int argc, _TCHAR* argv[])
 #define AUFGABE 2
 #ifdef AUFGABE
 #if AUFGABE == 1
-	std::cout << "Aufgabe 1" << endl;
+	std::cout << "Aufgabe 1 wird ausgefuehrt" << endl << endl;
 	typedef bg::model::point<double, 2, bg::cs::cartesian> boostPoint;
 	typedef std::pair<boostPoint, vertex_t> rtree_value;
 	typedef boost::geometry::index::rtree<rtree_value, boost::geometry::index::quadratic<16>> knn_rtree_t_ohne_worm;
@@ -326,7 +326,7 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	write_gnuplot_file2(g, "graph.dat");
 #else
-	std::cout << "!Aufgabe 1" << endl;
+	std::cout << "Aufgabe 2 wird ausgefuehrt" << endl << endl;
 
 	WormCell cell;
 	Eigen::VectorXd qStart(5), qGoal(5), q(5);
@@ -337,7 +337,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	const float graphstepsize = .1f;
 
 	const int nNodes = 25000;
-#define TEST_CASE 1
+#define TEST_CASE 2
 #ifdef TEST_CASE
 #if TEST_CASE == 0
 	// Example

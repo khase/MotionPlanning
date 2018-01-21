@@ -4,7 +4,6 @@
 #include <random>
 #include <windows.h>
 #include <thread>
-
 #include <vector>
 #include <boost/geometry.hpp>
 #include <boost/geometry/geometries/point.hpp>
@@ -17,120 +16,116 @@
 #include <utility>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/connected_components.hpp>
-
 #include <boost/random.hpp>
 #include <boost/random/normal_distribution.hpp> // for normal distribution
-
 using namespace std;
 namespace bg = boost::geometry;
 namespace bgi = boost::geometry::index;
 typedef std::pair<Eigen::VectorXd, unsigned> value;
 typedef bg::model::point<Eigen::VectorXd, 1, bg::cs::cartesian> point;
+typedef std::pair<int, vertex_t> intVertexPair;
+std::list<intVertexPair> intVertexList;
+std::mutex listMutex;  // protects intVertexList
 
-
-
-
-int addEdges(int num, int start, int end, graph_t &g, knn_rtree_t &rtree)
-{
+// addEdges: Fügt Kanten zwischen einer allen Nodes in der gegebenen Spanne (zwischen Start und End im Graph) und resampleCnt*3 Nachbarn dieser Node hinzu.
+int addEdges(int num, int start, int end, graph_t &g, knn_rtree_t &rtree, int resampleCnt) {
 	WormCell cell;
-	int edges = 0;
 	for (int index = start; index < end; index++) {
 		if (index % 100 == 0) {
 			std::cout << ".";
 		}
-		vertex_t vert = vertex_t(index);
-		Eigen::VectorXd actVector = g[vert].q_;
-		std::vector<rtree_value> nearest;
-		MyWorm test = MyWorm(actVector);
-		rtree.query(bgi::nearest(test, 7), std::back_inserter(nearest));
-
+		vertex_t vert = vertex_t(index);												// Vertex erstellen
+		Eigen::VectorXd actVector = g[vert].q_;											// Aktuell betrachteten Vektor erstellen
+		std::vector<rtree_value> nearest;												// Liste, in welcher nachher die nächsten Nodes gespeichert werden erstellen
+		MyWorm test = MyWorm(actVector);												// Worm mit aktueller Node erstellen, um die nächsten Nodes dazu finden zu können
+		rtree.query(bgi::nearest(test, resampleCnt*3), std::back_inserter(nearest));	// Gibt die nächsten resampleCnt*3 Nodes zurück
+		int cntNoConnectionFound = 0;					// Zähler, wird später beim resampling verwendet
 
 		for (auto &q : nearest)
 		{
 			Eigen::VectorXd nearestVector = g[q.second].q_;
-			if (!boost::edge(q.second, vert, g).second && cell.CheckMotion(nearestVector, actVector)) {
-				float lengthOfEdge = (nearestVector - actVector).norm();
-				boost::add_edge(q.second, vert, lengthOfEdge, g);
-				edges++;
+			if (!boost::edge(q.second, vert, g).second && cell.CheckMotion(nearestVector, actVector)) {		// Checkt, ob die Kante bereits im Knoten ist und ob die Bewegung zwischen dem aktuellen und dem gefundenen nächsten okay ist
+				float lengthOfEdge = (nearestVector - actVector).norm();			// Speichert die Länge der Bewegung/Kante
+				boost::add_edge(q.second, vert, lengthOfEdge, g);					// Fügt die Kante dem Graphen hinzu
+			}
+			else if (!cell.CheckMotion(nearestVector, actVector))			// Ist die Bewgung nicht okay, sprich kollidiert der Wurm während der Bewegung, wird der Zähler hochgezählt
+			{
+				cntNoConnectionFound++;
 			}
 		}
+		if (cntNoConnectionFound == 0)
+			continue;
+		std::lock_guard<std::mutex> lock(listMutex);		// Lock wird gebruacht wegen Multithreading
+		intVertexList.push_back(intVertexPair(cntNoConnectionFound, vert));		// Füge der Liste aller Nodes die Anzahl der fehlgeschlagenen Verbindungsversuche sowie den zugehörigen Vertex hinzu
 	}
 	return 0;
 }
 
+
+/*
+	Erstellt auf Basis der Liste intVertexList Nodes, welche sich hauptsächlich in der Nähe von Obstacles befinden. Dieses Verfahren basiert auf dem Gausschen Sampling.
+*/
 int resample(int nNodes, graph_t &g, knn_rtree_t &rtree, WormCell &cell, boost::mt19937 &rng)
 {
 	int index = 0;
-	while (index < nNodes){
-
+	while (intVertexList.size() > 0){						// Arbeite solange bis die Liste leer ist
 		Eigen::VectorXd actVector;
-
-		actVector = cell.NextRandomCspace();
-		if (!MyWorm::IsInsideRange(actVector))
-			continue;
-
-		double newVectorValues[5];
-		bool newVectorOkay = true;
-
-		for (int i = 0; i < 5; i++)
+		intVertexPair actPair = intVertexList.front();		// Hole das oberste Element der Liste.
+		intVertexList.pop_front();							// Lösche das oberste Element aus der Liste
+		actVector = g[actPair.second].q_;					// Zwischenspeichern der aktuellen Node
+		for (int i = 0; i < (actPair.first); i++)			// So viele Resamples wie fehlgeschlagene Verbindungen
 		{
-			int radius = 0.07;
-			if (i >= 2)
-				radius = 1;
+			double newVectorValues[5];
+			bool newVectorOkay = true;
+			for (int i = 0; i < 5; i++)					// Erstelle für alle 5 Freiheitsgrade einen Wert
+			{
+				int radius = 0.07;
+				if (i >= 2)
+					radius = 1;
 
-			boost::normal_distribution<> nd(actVector[i], radius);
-			
-			boost::variate_generator<boost::mt19937&,
-				boost::normal_distribution<> > var_nor(rng, nd);
-			double newValue = var_nor();
-			newVectorValues[i] = newValue;
-		}
-
-		Eigen::VectorXd newVector(5);
-
-		newVector << newVectorValues[0], newVectorValues[1], newVectorValues[2], newVectorValues[3], newVectorValues[4];
-
-		if (cell.CheckPosition(actVector) == cell.CheckPosition(newVector) || !MyWorm::IsInsideRange(newVector)) {
-			continue;
-		}
-		// erstelle vertex Descriptor
-		vertex_prop_t prop;
-
-		if (cell.CheckPosition(actVector))
-		{
-			prop.q_ = actVector;
-		}
-		else if (cell.CheckPosition(newVector))
-		{
+				boost::normal_distribution<> nd(actVector[i], radius);
+				boost::variate_generator < boost::mt19937&,
+					boost::normal_distribution<> > var_nor(rng, nd);
+				double newValue = var_nor();
+				newVectorValues[i] = newValue;
+			}
+			Eigen::VectorXd newVector(5);
+			newVector << newVectorValues[0], newVectorValues[1], newVectorValues[2], newVectorValues[3], newVectorValues[4];		// Erstelle aus den Werten eine Node
+			if (!MyWorm::IsInsideRange(newVector) || !cell.CheckPosition(newVector)) {		// Checke, ob die Node kollidiert und im Einheitsquadrat liegt. Wenn nein, verwerfe die Node
+				continue;
+			}
+			vertex_prop_t prop;																// Wenn ja, füge die Node in den rtree ein
 			prop.q_ = newVector;
+			vertex_t vert = boost::add_vertex(prop, g);
+			MyWorm robot = cell.Robot();
+			robot.q() = prop.q_;
+			rtree_value val = rtree_value(robot, vert);
+			index++;
+			if (index % 100 == 0)
+				std::cout << ".";
+			rtree.insert(val);
 		}
-
-		// generiere zufällige Konfiguration
-		vertex_t vert = boost::add_vertex(prop, g);
-
-		// Trage Konfiguration in kd-Tree ein
-		rtree_value val = rtree_value(cell.Robot(), vert);
-		index++;
-		
-		if (index % (nNodes/10) == 0)
-			std::cout << ".";
-		rtree.insert(val);
 	}
-	return 0;
+	return index;
 }
 
+// Erstellt nNodes zufällige, kollisionsfreie Nodes im Konfigurationsraum
 int buildRandomNodes(int nNodes, graph_t &g, knn_rtree_t &rtree, WormCell &cell){
-	for (int index = 0; index < nNodes; index++) {
-		// erstelle vertex Descriptor
-		vertex_prop_t prop;
-		// generiere zufällige, kollisionsfreie Konfiguration
-		prop.q_ = cell.NextRandomCfree();
-
+	int index = 0;
+	while (index < nNodes) {
+		vertex_prop_t prop;		// erstelle vertex Descriptor
+		
+		prop.q_ = cell.NextRandomCfree();		// generiere zufällige, kollisionsfreie Konfiguration
+		
 		vertex_t vert = boost::add_vertex(prop, g);
-
-		// Trage Konfiguration in kd-Tree ein
-		rtree_value val = rtree_value(cell.Robot(), vert);
+		
+		MyWorm robot = cell.Robot();
+		
+		robot.q() = prop.q_;
+		rtree_value val = rtree_value(robot, vert);		// Trage Konfiguration in kd-Tree ein
 		rtree.insert(val);
+
+		index++;
 		if (index % (nNodes / 10) == 0)
 			std::cout << ".";
 	}
@@ -146,9 +141,9 @@ int _tmain(int argc, _TCHAR* argv[])
 	graph_t g;
 	knn_rtree_t rtree;
 	const float stepsize = .025f;
-	boost::mt19937 rng;
+	boost::mt19937 rng(0);
 
-	const int nNodes = 5000;
+	const int nNodes = 1000;			// Hier wird definiert, wie viele Random-Nodes am Anfang erstellt werden sollen
 
 #define TEST_CASE 3
 #ifdef TEST_CASE
@@ -227,12 +222,12 @@ int _tmain(int argc, _TCHAR* argv[])
 #endif
 #endif
 
-	DWORD dwStartTotal = GetTickCount();
+	DWORD dwStartTotal = GetTickCount();			// Erstelle Timer für die Zeitausgabe
 	DWORD dwStart;
 	DWORD dwElapsed;
 
-	g = graph_t(0);
-	int connectedNodes = 0;
+	g = graph_t(0);									// Erstelle einen Graph, in dem alle Nodes und Edges gespeichert sind
+	int connectedNodes = 0;							// Erstelle mehrere fürs resampling nötige Varialen
 	bool resampling = false;
 	int resamplesDone = 0;
 	bool solutionFound = false;
@@ -240,7 +235,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	vertex_t startIndex;
 	vertex_t goalIndex;
 
-	if (!cell.CheckPosition(qStart)){
+	if (!cell.CheckPosition(qStart)){					// Checke, ob die Start- und Zielkonfigurationen plausibel sind
 		cout << "Startposition ungueltig!" << endl;
 		return 0;
 	}
@@ -260,26 +255,26 @@ int _tmain(int argc, _TCHAR* argv[])
 	}
 
 
-	do {
+	do {			// Hier startet die eigentliche Berechnung des Weges
 		// Startzeit
 		resamplesDone++;
 		dwStart = GetTickCount();
-		// 1. step: building up a graph g consisting of nNodes vertices
 
-		if (!resampling) {
+		if (!resampling) {					// Im ersten Schritt werden nNodes viele zufällige Nodes erstellt
 			std::cout << "1. Step: building " << nNodes << " random nodes for the graph" << endl; 
 			buildRandomNodes(nNodes, std::ref(g), std::ref(rtree), std::ref(cell));
 		}
-		else
+		else								// Ansonsten werden mit Hilfe der Methode resample neue Nodes erzeugt
 		{
-			std::cout << "1. Step: Resampling. Building " << nNodes*0.8 << " nodes near obstacles and " << nNodes*0.2 << " random nodes for the graph" << endl;
-			resample(nNodes*0.8, std::ref(g), std::ref(rtree), std::ref(cell), std::ref(rng));
-			buildRandomNodes(nNodes * 0.2, std::ref(g), std::ref(rtree), std::ref(cell));
+			std::cout << "1. Step: Resampling...." << endl;
+			int nodesAdded = resample(nNodes, std::ref(g), std::ref(rtree), std::ref(cell), std::ref(rng));
+			//buildRandomNodes(nNodes * 0.1, std::ref(g), std::ref(rtree), std::ref(cell));
+			std::cout << endl << nodesAdded << " Nodes added by resampling" << endl;
 		}
 
 		// Zeit ausgeben ( in ms )
 		dwElapsed = GetTickCount() - dwStart;
-		std::cout << endl << "took " << dwElapsed << " ms\n\n";
+		std::cout << endl << "took " << dwElapsed << " ms\n\n";		// Gebe die benötigte Zeit aus
 
 		// ###################	
 
@@ -288,17 +283,18 @@ int _tmain(int argc, _TCHAR* argv[])
 		int connectedNotesBefore = g.m_edges.size();
 		// 2. step: building edges for the graph, if the connection of 2 nodes are in free space
 		std::cout << "2. Step: buildung edges for the graph" << endl;
+		intVertexList.clear();
 		const int numThreads = 8;
 		std::vector<std::thread> threads;
 		int numVertices = g.m_vertices.size();
-		for (int i = 0; i < numThreads; ++i) {
-			threads.push_back(std::thread(addEdges, i, (i* (numVertices / numThreads)), ((i + 1) * (numVertices / numThreads)), std::ref(g), std::ref(rtree)));
+		for (int i = 0; i < numThreads; ++i) {		// Erstelle numThreads Threads, welche mit Hilfe der Methode addEdges versuchen, die vorhandenen Nodes zu verbinden
+			threads.push_back(std::thread(addEdges, i, (i* (numVertices / numThreads)), ((i + 1) * (numVertices / numThreads)), std::ref(g), std::ref(rtree), resamplesDone));
 		}
 		for (auto& t : threads) {
 			t.join();
 		}
 		connectedNodes = g.m_edges.size() - connectedNotesBefore;
-		std::cout << endl << connectedNodes << " edges added" << endl;
+		std::cout << endl << connectedNodes << " edges added" << endl;		// Gebe die Anzahl an erstellten Kanten aus
 
 		// Zeit ausgeben ( in ms )
 		dwElapsed = GetTickCount() - dwStart;
@@ -313,7 +309,7 @@ int _tmain(int argc, _TCHAR* argv[])
 
 		vertex_prop_t prop; 
 		rtree_value val;
-		if (!resampling) {
+		if (!resampling) {		// Füge im ersten Schritt die Startkonfiguration zum Graphen hinzu
 			prop.q_ = qStart;
 			startIndex = boost::add_vertex(prop, g);
 			val = rtree_value(cell.Robot(), startIndex);
@@ -324,7 +320,7 @@ int _tmain(int argc, _TCHAR* argv[])
 		Eigen::VectorXd actVector = g[startIndex].q_;
 		std::vector<rtree_value> nearest;
 		MyWorm test = MyWorm(actVector);
-		rtree.query(bgi::nearest(test, 500), std::back_inserter(nearest));
+		rtree.query(bgi::nearest(test, 500), std::back_inserter(nearest));		// Suche die 500 nächsten Nodes und versuche, die Startkonfiguration mit diesen zu verbinden
 
 		int edges = 0;
 		for (auto &q : nearest)
@@ -349,7 +345,7 @@ int _tmain(int argc, _TCHAR* argv[])
 		// 4. Step: connecting goal configuration to graph
 		std::cout << "4. Step: connecting goal configuration to graph" << endl;
 
-		if (!resampling) {
+		if (!resampling) {			// Siehe Startkonfiguration
 			prop.q_ = qGoal;
 			goalIndex = boost::add_vertex(prop, g);
 			val = rtree_value(cell.Robot(), goalIndex);
@@ -378,25 +374,25 @@ int _tmain(int argc, _TCHAR* argv[])
 		dwElapsed = GetTickCount() - dwStart;
 		std::cout << "took " << dwElapsed << " ms\n\n";
 
-		// ###################
+		// ###################		Gib einige Informationen zum Graphen aus
 
 		std::vector<int> component(num_vertices(g));
 		std::cout << g.m_vertices.size() << " Vertices" << endl;
 		std::cout << g.m_edges.size() << " Edges" << endl;
 		int num = connected_components(g, &component[0]);
 		std::cout << num << " Components" << endl;
-		if (component[startIndex] != component[goalIndex]) {
+		if (component[startIndex] != component[goalIndex]) {		// Wenn Start- und Zielkonfiguration nicht im gleichen Graphen liegen muss geresamplt werden
 			std::cout << "No Connection!" << endl;
-			std::cout << "Resampling..." << endl;
+			std::cout << resamplesDone << ". resample..."  << endl;
 			resampling = true;
 		}
-		else {
+		else {														// Ansonsten wird aus der do-while-Schleife gesprungen
 			resampling = false;
 			solutionFound = true;
 			std::cout << "Solution found after " << resamplesDone-1 << " resample(s)." << endl;
 		}
 
-		if (resamplesDone >= 100 && !solutionFound){
+		if (resamplesDone >= 20 && !solutionFound){					// Nach 20 Resamples wird gefragt, ob weitergemacht werden soll, um ein endloses laufen des Programms zu verhindern
 			cout << " Already " << resamplesDone << " resamples were processed but there ist still no solution.\r\n  Would you like to continue?\r\n  y / n  ";
 			string shouldResample;
 			std::cin >> shouldResample;
@@ -429,7 +425,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	std::vector<vertex_t> p(num_vertices(g));
 	std::vector<float> d(num_vertices(g));
 
-	boost::dijkstra_shortest_paths(g, startIndex,
+	boost::dijkstra_shortest_paths(g, startIndex,			// Suche mit Hilfe des Dijkstara den kürzesten Pfad zwischen Start- und Zielkonfiguration
 		predecessor_map(boost::make_iterator_property_map(p.begin(), get(boost::vertex_index, g))).
 		distance_map(boost::make_iterator_property_map(d.begin(), get(boost::vertex_index, g))));
 
@@ -447,13 +443,13 @@ int _tmain(int argc, _TCHAR* argv[])
 	std::cout << "6. Step: building easyrob path" << endl;
 
 	vertex_t current = goalIndex;
-	while (current != startIndex) {
+	while (current != startIndex) {					// Laufe rückwärts durch den vom Dijkstra gefundenen Weg und speichere diesen in der Variable path
 		path.push_back(g[current].q_);
 		current = p[current];
 	}
 	path.push_back(g[startIndex].q_);
 
-	write_easyrob_program_file(path, "solution.prg", false);
+	write_easyrob_program_file(path, "solution.prg", false);		// Schreibe den Pfad in ein Easyrob-Program-File
 
 	// Zeit ausgeben ( in ms )
 	dwElapsed = GetTickCount() - dwStart;
@@ -463,7 +459,7 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	// Zeit ausgeben ( in ms )
 	dwElapsed = GetTickCount() - dwStartTotal;
-	std::cout << "total time took " << dwElapsed << " ms\n\n";
+	std::cout << "total time took " << dwElapsed << " ms\n\n";		// Fertig, gib die Zeit aus die für alles benötigt wurde
 
 	return EXIT_SUCCESS;
 }
